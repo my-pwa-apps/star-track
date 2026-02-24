@@ -44,7 +44,9 @@
   let searchIndexCache = null;  // invalidated after computePositions
   let orientation = { alpha: null, beta: null, gamma: null };
   let useDeviceOrientation = false;
-  let compassAlpha = null; // smoothed heading
+  let compassAlpha = null; // smoothed azimuth
+  let smoothBeta    = null; // smoothed tilt   (altitude)
+  let smoothGamma   = null; // smoothed roll   (az correction)
 
   // ── Init ───────────────────────────────────────────────────
   function init() {
@@ -200,28 +202,31 @@
   function applyDeviceOrientation() {
     if (orientation.alpha === null) return;
 
-    // Smooth compass heading
-    let targetAlpha = orientation.alpha;
+    const LERP = 0.08; // lower = smoother, less twitchy (was 0.15)
+
+    // ─ Azimuth (alpha) — shortest-arc lerp to avoid 359↔•0 wrap jump ─
+    const targetAlpha = orientation.alpha;
     if (compassAlpha === null) compassAlpha = targetAlpha;
-    // Shortest-arc interpolation
-    let diff = targetAlpha - compassAlpha;
-    if (diff >  180) diff -= 360;
-    if (diff < -180) diff += 360;
-    compassAlpha = (compassAlpha + diff * 0.15 + 360) % 360;
+    let diffA = targetAlpha - compassAlpha;
+    if (diffA >  180) diffA -= 360;
+    if (diffA < -180) diffA += 360;
+    compassAlpha = (compassAlpha + diffA * LERP + 360) % 360;
 
-    // When holding phone portrait up to sky:
-    // beta = 90° -> looking at horizon, beta = 0° -> flat on table, beta = -90° -> looking straight up
-    // altitude = -(beta - 90) ... but beta ranges -180 to 180
-    // If beta > 0: phone is tilted forward (top away), altitude = 90 - beta
-    // Clamped altitude
-    const beta = orientation.beta ?? 45;
-    const alt  = Math.max(-10, Math.min(90, 90 - beta));
+    // ─ Tilt / altitude (beta) — linear lerp ─
+    const targetBeta = orientation.beta ?? 45;
+    if (smoothBeta === null) smoothBeta = targetBeta;
+    smoothBeta += (targetBeta - smoothBeta) * LERP;
 
-    // Azimuth from compass + gamma correction for portrait tilt
-    // In portrait mode az = compassAlpha (approximately, with small gamma correction)
-    const gamma = orientation.gamma ?? 0;
-    // Rough correction for device roll
-    const az = ((compassAlpha + gamma * 0.5) % 360 + 360) % 360;
+    // ─ Roll correction (gamma) — linear lerp ─
+    const targetGamma = orientation.gamma ?? 0;
+    if (smoothGamma === null) smoothGamma = targetGamma;
+    smoothGamma += (targetGamma - smoothGamma) * LERP;
+
+    // altitude = 90 - beta  (beta=90 → horizon, beta=0 → flat, beta<0 → past zenith)
+    const alt = Math.max(-10, Math.min(90, 90 - smoothBeta));
+
+    // azimuth + small roll correction
+    const az  = ((compassAlpha + smoothGamma * 0.5) % 360 + 360) % 360;
 
     renderer.viewAz  = az;
     renderer.viewAlt = alt;
@@ -233,6 +238,10 @@
     btnMap.classList.add('active');
     btnAR.classList.remove('active');
     useDeviceOrientation = false;
+    // Reset smoothed sensor state so next AR entry starts clean
+    compassAlpha = null;
+    smoothBeta   = null;
+    smoothGamma  = null;
     if (arReadout) arReadout.classList.add('hidden');
     setSidebarStatus('MAP MODE ACTIVE');
     setStatus('');
