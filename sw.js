@@ -3,7 +3,7 @@
 // Cache-first for local assets · Network-first for CDN
 // ============================================================
 
-const CACHE_VERSION = 'startrack-v7';
+const CACHE_VERSION = 'startrack-v8';
 const CDN_CACHE     = 'startrack-cdn-v1';
 
 const LOCAL_ASSETS = [

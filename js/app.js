@@ -53,6 +53,12 @@
   let prevRawGamma  = null;
   let wakeLock      = null; // Screen Wake Lock handle
 
+  // ── Sensor ring buffer (multi-sample averaging) ────────────
+  // Sensors fire at ~60 Hz; accumulate readings between animation frames
+  // and average them to reject high-frequency noise before LERP.
+  const SENSOR_BUF_SIZE = 6;
+  const sensorBuf = { alpha: [], beta: [], gamma: [] };
+
   // ── Init ───────────────────────────────────────────────────
   function init() {
     renderer = new SkyRenderer(canvas);
@@ -360,29 +366,60 @@
     orientation.alpha = e.alpha ?? orientation.alpha;
     orientation.beta  = e.beta  ?? orientation.beta;
     orientation.gamma = e.gamma ?? orientation.gamma;
+
+    // Push into ring buffer for multi-sample averaging
+    if (e.alpha != null) {
+      sensorBuf.alpha.push(e.alpha);
+      if (sensorBuf.alpha.length > SENSOR_BUF_SIZE) sensorBuf.alpha.shift();
+    }
+    if (e.beta != null) {
+      sensorBuf.beta.push(e.beta);
+      if (sensorBuf.beta.length > SENSOR_BUF_SIZE) sensorBuf.beta.shift();
+    }
+    if (e.gamma != null) {
+      sensorBuf.gamma.push(e.gamma);
+      if (sensorBuf.gamma.length > SENSOR_BUF_SIZE) sensorBuf.gamma.shift();
+    }
   }
 
   function applyDeviceOrientation() {
     if (orientation.alpha === null) return;
 
-    // Adaptive LERP — scales with angular velocity so the view stays rock
-    // steady when held still (noise rejected) yet snaps instantly when panning
-    //   LERP_MIN : used when nearly stationary  → tight noise rejection
-    //   LERP_MAX : used at fast deliberate sweeps → full responsiveness
-    //   VEL_FULL : °/frame velocity that saturates to LERP_MAX
-    const LERP_MIN = 0.012;
-    const LERP_MAX = 0.20;
-    const VEL_FULL = 5.0; // degrees per frame
-    const DEADBAND_A = 0.18;
-    const DEADBAND_B = 0.12;
-    const DEADBAND_G = 0.18;
+    // ── Multi-sample average ─────────────────────────────────
+    // Average the ring-buffer of recent sensor readings to reject
+    // high-frequency noise _before_ the LERP filter.
+    function avgCircular(arr) {
+      // Circular mean for angles that wrap 0↔360 (alpha)
+      if (arr.length === 0) return null;
+      let sx = 0, sy = 0;
+      for (const v of arr) { sx += Math.cos(v * DEG); sy += Math.sin(v * DEG); }
+      return ((Math.atan2(sy, sx) * RAD) + 360) % 360;
+    }
+    function avgLinear(arr) {
+      if (arr.length === 0) return null;
+      let s = 0; for (const v of arr) s += v; return s / arr.length;
+    }
+
+    const targetAlpha = sensorBuf.alpha.length > 0 ? avgCircular(sensorBuf.alpha) : orientation.alpha;
+    const targetBeta  = sensorBuf.beta.length  > 0 ? avgLinear(sensorBuf.beta)     : (orientation.beta  ?? 135);
+    const targetGamma = sensorBuf.gamma.length > 0 ? avgLinear(sensorBuf.gamma)    : (orientation.gamma ?? 0);
+
+    // Drain buffer each frame so next frame averages fresh samples
+    sensorBuf.alpha.length = 0;
+    sensorBuf.beta.length  = 0;
+    sensorBuf.gamma.length = 0;
+
+    // Adaptive LERP — scales with angular velocity so the view stays rock-
+    // steady when held still (noise rejected) yet snaps when panning.
+    const LERP_MIN = 0.008;
+    const LERP_MAX = 0.25;
+    const VEL_FULL = 4.0; // degrees per frame to saturate at LERP_MAX
+    const DEADBAND_A = 0.25;
+    const DEADBAND_B = 0.18;
+    const DEADBAND_G = 0.25;
     const SPIKE_A = 35;
     const SPIKE_B = 25;
     const SPIKE_G = 35;
-
-    const targetAlpha = orientation.alpha;
-    const targetBeta  = orientation.beta  ?? 135; // default to looking up at 45°
-    const targetGamma = orientation.gamma ?? 0;
 
     // ─ Per-axis instantaneous velocity (degrees since last frame) ─
     let velA = 0, velB = 0, velG = 0;
@@ -455,6 +492,9 @@
     prevRawAlpha = null;
     prevRawBeta  = null;
     prevRawGamma = null;
+    sensorBuf.alpha.length = 0;
+    sensorBuf.beta.length  = 0;
+    sensorBuf.gamma.length = 0;
     if (arReadout) arReadout.classList.add('hidden');
     setSidebarStatus('MAP MODE ACTIVE');
     setStatus('');
