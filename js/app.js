@@ -394,14 +394,41 @@
     }
   }
 
+  // Helper: W3C ZXY Euler → ENU unit look-vector.
+  // R = Rz(-α) · Rx(β) · Ry(γ) applied to device −Z axis (camera back face).
+  function eulerToLookVector(alphaDeg, betaDeg, gammaDeg) {
+    const a = alphaDeg * DEG, b = betaDeg * DEG, g = gammaDeg * DEG;
+    return {
+      east:  -Math.cos(a)*Math.sin(g) + Math.sin(a)*Math.sin(b)*Math.cos(g),
+      north:  Math.sin(a)*Math.sin(g) + Math.cos(a)*Math.sin(b)*Math.cos(g),
+      up:    -Math.cos(b)*Math.cos(g),
+    };
+  }
+
+  // Helper: sync smoothed look-vector to the current renderer view (az/alt).
+  // Called before re-enabling the sensor after a drag or object-select pause,
+  // so the LERP starts from where the user left the view instead of snapping.
+  function syncSmoothVecToView() {
+    const altR = renderer.viewAlt * DEG;
+    const azR  = renderer.viewAz  * DEG;
+    smoothAlpha = Math.cos(altR) * Math.sin(azR); // east
+    smoothBeta  = Math.cos(altR) * Math.cos(azR); // north
+    smoothGamma = Math.sin(altR);                 // up
+    prevRawAlpha = null; // reset prev-frame vector so velocity = 0 first frame
+    prevRawBeta  = null;
+    prevRawGamma = null;
+    stationaryFrames = 0;
+    stationaryLock   = false;
+  }
+
   function applyDeviceOrientation() {
     if (orientation.alpha === null) return;
 
-    // ── Multi-sample average ─────────────────────────────────
-    // Average the ring-buffer of recent sensor readings to reject
-    // high-frequency noise _before_ the LERP filter.
+    // ── Multi-sample average ──────────────────────────────────────────────
+    // Sensors fire at ~60 Hz; accumulate between frames and average to reject
+    // high-frequency noise.  Average in VECTOR space (not angle space) to
+    // avoid wrap-around artifacts and singularity amplification.
     function avgCircular(arr) {
-      // Circular mean for angles that wrap 0↔360 (alpha)
       if (arr.length === 0) return null;
       let sx = 0, sy = 0;
       for (const v of arr) { sx += Math.cos(v * DEG); sy += Math.sin(v * DEG); }
@@ -413,128 +440,85 @@
     }
 
     const targetAlpha = sensorBuf.alpha.length > 0 ? avgCircular(sensorBuf.alpha) : orientation.alpha;
-    const targetBeta  = sensorBuf.beta.length  > 0 ? avgLinear(sensorBuf.beta)     : (orientation.beta  ?? 135);
-    const targetGamma = sensorBuf.gamma.length > 0 ? avgLinear(sensorBuf.gamma)    : (orientation.gamma ?? 0);
+    const targetBeta  = sensorBuf.beta.length  > 0 ? avgLinear(sensorBuf.beta)    : (orientation.beta  ?? 135);
+    const targetGamma = sensorBuf.gamma.length > 0 ? avgLinear(sensorBuf.gamma)   : (orientation.gamma ?? 0);
 
-    // Drain buffer each frame so next frame averages fresh samples
     sensorBuf.alpha.length = 0;
     sensorBuf.beta.length  = 0;
     sensorBuf.gamma.length = 0;
 
-    // Adaptive LERP — scales with angular velocity so the view stays rock-
-    // steady when held still (noise rejected) yet snaps when panning.
-    const LERP_MIN = 0.006;
-    const LERP_MAX = 0.25;
-    const VEL_FULL = 4.0; // degrees per frame to saturate at LERP_MAX
-    const DEADBAND_A = 0.4;
-    const DEADBAND_B = 0.3;
-    const DEADBAND_G = 0.4;
-    const SPIKE_A = 35;
-    const SPIKE_B = 25;
-    const SPIKE_G = 35;
-    const STATIONARY_ENTER = 0.35; // °/frame enter threshold
-    const STATIONARY_EXIT  = 0.9;  // °/frame leave threshold (hysteresis)
+    // ── Convert raw Euler angles → 3D look-vector ─────────────────────────
+    // All subsequent filtering is done on the unit vector, which has no
+    // singularities or wrap-around problems.  Euler smoothing had the flaw
+    // that near the horizon (beta ≈ 90°, up ≈ 0) tiny gamma noise produced
+    // large azimuth jumps even after smoothing.
+    const rawVec = eulerToLookVector(targetAlpha, targetBeta, targetGamma);
+
+    // ── Angular velocity (in degrees) for motion detection ───────────────
+    // Measured as the angle between successive look-vectors (= acos(dot)).
+    const SPIKE_DEG = 20;              // ignore single-frame jumps > 20°
+    const STATIONARY_ENTER    = 0.35;  // °/frame → enter still-state
+    const STATIONARY_EXIT     = 0.9;   // °/frame → exit still-state (hysteresis)
     const STATIONARY_HOLD_FRAMES = 8;
 
-    // ─ Per-axis instantaneous velocity (degrees since last frame) ─
-    let velA = 0, velB = 0, velG = 0;
+    let angVel = 0;
     if (prevRawAlpha !== null) {
-      let da = targetAlpha - prevRawAlpha;
-      if (da >  180) da -= 360;          // shortest arc
-      if (da < -180) da += 360;
-      if (Math.abs(da) > SPIKE_A) da = 0;
-      velA = Math.abs(da);
+      // Re-use prevRaw* to hold the previous look-vector components
+      const dot = Math.max(-1, Math.min(1,
+        prevRawAlpha * rawVec.east +
+        prevRawBeta  * rawVec.north +
+        prevRawGamma * rawVec.up
+      ));
+      angVel = Math.acos(dot) * RAD;
+      if (angVel > SPIKE_DEG) angVel = 0; // spike → treat as no motion
     }
-    if (prevRawBeta  !== null) {
-      let db = targetBeta - prevRawBeta;
-      if (Math.abs(db) > SPIKE_B) db = 0;
-      velB = Math.abs(db);
-    }
-    if (prevRawGamma !== null) {
-      let dg = targetGamma - prevRawGamma;
-      if (Math.abs(dg) > SPIKE_G) dg = 0;
-      velG = Math.abs(dg);
-    }
-    prevRawAlpha = targetAlpha;
-    prevRawBeta  = targetBeta;
-    prevRawGamma = targetGamma;
+    prevRawAlpha = rawVec.east;
+    prevRawBeta  = rawVec.north;
+    prevRawGamma = rawVec.up;
 
-    // ─ Motion gate with hysteresis: freeze when still, unfreeze on real motion ─
-    const maxVel = Math.max(velA, velB, velG);
+    // ── Stationary hysteresis gate ────────────────────────────────────────
     if (!stationaryLock) {
-      if (maxVel < STATIONARY_ENTER) stationaryFrames += 1;
+      if (angVel < STATIONARY_ENTER) stationaryFrames += 1;
       else stationaryFrames = 0;
       if (stationaryFrames >= STATIONARY_HOLD_FRAMES) stationaryLock = true;
-    } else if (maxVel > STATIONARY_EXIT) {
-      stationaryLock = false;
+    } else if (angVel > STATIONARY_EXIT) {
+      stationaryLock   = false;
       stationaryFrames = 0;
     }
+    if (stationaryLock) return;
 
-    if (stationaryLock) {
-      return;
+    // ── Adaptive LERP on the unit vector ─────────────────────────────────
+    // LERP in 3D is equivalent to SLERP for small angles and avoids all
+    // Euler-space singularities.  Factor scales with angular velocity so the
+    // view is rock-steady when held still, yet snaps quickly when panning.
+    const LERP_MIN = 0.04;   // slightly higher than before — vector LERP is
+    const LERP_MAX = 0.30;   // inherently smoother so we can be more responsive
+    const VEL_FULL = 4.0;    // °/frame to saturate at LERP_MAX
+
+    const lerp = LERP_MIN + (LERP_MAX - LERP_MIN) * Math.min(angVel / VEL_FULL, 1);
+
+    // Initialise smooth vector on first frame
+    if (smoothAlpha === null) {
+      smoothAlpha = rawVec.east;
+      smoothBeta  = rawVec.north;
+      smoothGamma = rawVec.up;
     }
 
-    // ─ Adaptive lerp factors, one per axis ─
-    const lerpA = LERP_MIN + (LERP_MAX - LERP_MIN) * Math.min(velA / VEL_FULL, 1);
-    const lerpB = LERP_MIN + (LERP_MAX - LERP_MIN) * Math.min(velB / VEL_FULL, 1);
-    const lerpG = LERP_MIN + (LERP_MAX - LERP_MIN) * Math.min(velG / VEL_FULL, 1);
+    // Component-wise linear interpolation (re-normalise to stay on unit sphere)
+    let sx = smoothAlpha + (rawVec.east  - smoothAlpha) * lerp;
+    let sy = smoothBeta  + (rawVec.north - smoothBeta)  * lerp;
+    let sz = smoothGamma + (rawVec.up    - smoothGamma) * lerp;
+    const len = Math.sqrt(sx*sx + sy*sy + sz*sz) || 1;
+    smoothAlpha = sx / len;
+    smoothBeta  = sy / len;
+    smoothGamma = sz / len;
 
-    // ─ Azimuth (alpha) — shortest-arc lerp to avoid 359↔0 wrap jump ─
-    if (smoothAlpha === null) smoothAlpha = targetAlpha;
-    let diffA = targetAlpha - smoothAlpha;
-    if (diffA >  180) diffA -= 360;
-    if (diffA < -180) diffA += 360;
-    if (Math.abs(diffA) < DEADBAND_A) diffA = 0;
-    smoothAlpha = (smoothAlpha + diffA * lerpA + 360) % 360;
+    // ── Extract alt / az from the smoothed look-vector ────────────────────
+    const alt = Math.asin(Math.max(-1, Math.min(1, smoothGamma))) * RAD;
+    const az  = ((Math.atan2(smoothAlpha, smoothBeta) * RAD) + 360) % 360;
 
-    // ─ Tilt / altitude (beta) ─
-    if (smoothBeta === null) smoothBeta = targetBeta;
-    let diffB = targetBeta - smoothBeta;
-    if (Math.abs(diffB) < DEADBAND_B) diffB = 0;
-    smoothBeta += diffB * lerpB;
-
-    // ─ Roll correction (gamma) ─
-    if (smoothGamma === null) smoothGamma = targetGamma;
-    let diffG = targetGamma - smoothGamma;
-    if (Math.abs(diffG) < DEADBAND_G) diffG = 0;
-    smoothGamma += diffG * lerpG;
-
-    // ── Full rotation-matrix projection ─────────────────────
-    // Treating alpha/beta/gamma as independent axes (az = alpha + gamma*k)
-    // is wrong: when the phone is rolled (gamma≠0), tilting up/down (changing
-    // beta) causes the bearing of the look-vector to shift sideways.  The
-    // correct solution is to apply the ZXY Euler rotation to the camera axis
-    // and read back the resulting world-frame alt/az.
-    //
-    // R = Rz(-α) · Rx(β) · Ry(γ)   (α negated: W3C alpha is CW, Rz is CCW)
-    // Camera axis in device frame = −Z (back face = pointing outward when flat)
-    // Apply R to [0, 0, -1] → world-frame direction (ENU: X=East Y=North Z=Up)
-    //
-    //  east  = -cos(α)·sin(γ) + sin(α)·sin(β)·cos(γ)
-    //  north =  sin(α)·sin(γ) + cos(α)·sin(β)·cos(γ)
-    //  up    = -cos(β)·cos(γ)
-    //
-    // Verification:
-    //  β=0,γ=0    → up=-1  → alt=-90° (camera faces down when phone flat) ✓
-    //  β=90,α=0   → N=1    → alt=0°, az=0°  (vertical portrait → North horizon) ✓
-    //  β=90,α=90  → E=1    → alt=0°, az=90° (vertical portrait → East horizon) ✓
-    //  β=135,α=0  → N=√½,up=√½ → alt=45°, az=0° (tilted 45° up toward N) ✓
-    //  β=180,α=0  → up=1   → alt=90° (camera at zenith) ✓
-    {
-      const a = smoothAlpha * DEG;
-      const b = smoothBeta  * DEG;
-      const g = smoothGamma * DEG;
-
-      const east  = -Math.cos(a)*Math.sin(g) + Math.sin(a)*Math.sin(b)*Math.cos(g);
-      const north =  Math.sin(a)*Math.sin(g) + Math.cos(a)*Math.sin(b)*Math.cos(g);
-      const up    = -Math.cos(b)*Math.cos(g);
-
-      const alt = Math.asin(Math.max(-1, Math.min(1, up))) * RAD;
-      const az  = ((Math.atan2(east, north) * RAD) + 360) % 360;
-
-      renderer.viewAz  = az;
-      renderer.viewAlt = alt;
-    }
+    renderer.viewAz  = az;
+    renderer.viewAlt = alt;
   }
 
   // ── Mode switching ─────────────────────────────────────────
@@ -755,13 +739,7 @@
           if (renderer.mode === 'ar') {
             // Sync LERP start-points to current view before re-enabling sensor
             // so the view transitions smoothly rather than snapping.
-            smoothAlpha      = renderer.viewAz;
-            smoothBeta       = renderer.viewAlt + 90;
-            prevRawAlpha     = null;
-            prevRawBeta      = null;
-            prevRawGamma     = null;
-            stationaryFrames = 0;
-            stationaryLock   = false;
+            syncSmoothVecToView();
             useDeviceOrientation = true;
           }
         }, 3000);
@@ -816,13 +794,7 @@
         // so the view transitions smoothly to sensor rather than snapping back.
         setTimeout(() => {
           if (renderer.mode === 'ar') {
-            smoothAlpha      = renderer.viewAz;
-            smoothBeta       = renderer.viewAlt + 90;
-            prevRawAlpha     = null;
-            prevRawBeta      = null;
-            prevRawGamma     = null;
-            stationaryFrames = 0;
-            stationaryLock   = false;
+            syncSmoothVecToView();
             useDeviceOrientation = true;
           }
         }, 800);
@@ -859,13 +831,7 @@
           // Re-enable sensor after mouse drag, synced to current view
           setTimeout(() => {
             if (renderer.mode === 'ar') {
-              smoothAlpha      = renderer.viewAz;
-              smoothBeta       = renderer.viewAlt + 90;
-              prevRawAlpha     = null;
-              prevRawBeta      = null;
-              prevRawGamma     = null;
-              stationaryFrames = 0;
-              stationaryLock   = false;
+              syncSmoothVecToView();
               useDeviceOrientation = true;
             }
           }, 1200);
