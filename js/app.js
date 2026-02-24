@@ -43,6 +43,7 @@
   let lastClockSecond  = -1;    // rate-limit time display to 1×/s
   let searchIndexCache = null;  // invalidated after computePositions
   let orientation = { alpha: null, beta: null, gamma: null };
+  let orientationSource = null; // 'absolute' | 'relative'
   let useDeviceOrientation = false;
   let compassAlpha = null; // smoothed azimuth
   let smoothBeta    = null; // smoothed tilt   (altitude)
@@ -58,6 +59,8 @@
   // and average them to reject high-frequency noise before LERP.
   const SENSOR_BUF_SIZE = 12;
   const sensorBuf = { alpha: [], beta: [], gamma: [] };
+  let stationaryFrames = 0;
+  let stationaryLock   = false;
 
   // ── Init ───────────────────────────────────────────────────
   function init() {
@@ -361,8 +364,17 @@
   }
 
   function onOrientation(e) {
-    // Prefer absolute (gives true N), fall back to relative
-    if (e.type === 'deviceorientation' && e.absolute === true) return; // handled by absolute
+    // Prefer a single source stream to avoid mixed absolute/relative jitter.
+    // Once absolute data is seen, ignore relative events for this session.
+    const isAbsolute = e.type === 'deviceorientationabsolute' || e.absolute === true;
+    if (isAbsolute) {
+      orientationSource = 'absolute';
+    } else if (orientationSource === 'absolute') {
+      return;
+    } else {
+      orientationSource = 'relative';
+    }
+
     orientation.alpha = e.alpha ?? orientation.alpha;
     orientation.beta  = e.beta  ?? orientation.beta;
     orientation.gamma = e.gamma ?? orientation.gamma;
@@ -420,7 +432,9 @@
     const SPIKE_A = 35;
     const SPIKE_B = 25;
     const SPIKE_G = 35;
-    const STATIONARY_VEL = 0.5; // °/frame — below this on ALL axes → freeze
+    const STATIONARY_ENTER = 0.35; // °/frame enter threshold
+    const STATIONARY_EXIT  = 0.9;  // °/frame leave threshold (hysteresis)
+    const STATIONARY_HOLD_FRAMES = 8;
 
     // ─ Per-axis instantaneous velocity (degrees since last frame) ─
     let velA = 0, velB = 0, velG = 0;
@@ -445,11 +459,19 @@
     prevRawBeta  = targetBeta;
     prevRawGamma = targetGamma;
 
-    // ─ Motion gate: if all axes are below stationary threshold, freeze ─
-    // This prevents sensor noise from slowly drifting the view when the
-    // device is completely still (e.g. lying on a table).
-    if (velA < STATIONARY_VEL && velB < STATIONARY_VEL && velG < STATIONARY_VEL) {
-      return; // skip entire LERP update — the device isn't moving
+    // ─ Motion gate with hysteresis: freeze when still, unfreeze on real motion ─
+    const maxVel = Math.max(velA, velB, velG);
+    if (!stationaryLock) {
+      if (maxVel < STATIONARY_ENTER) stationaryFrames += 1;
+      else stationaryFrames = 0;
+      if (stationaryFrames >= STATIONARY_HOLD_FRAMES) stationaryLock = true;
+    } else if (maxVel > STATIONARY_EXIT) {
+      stationaryLock = false;
+      stationaryFrames = 0;
+    }
+
+    if (stationaryLock) {
+      return;
     }
 
     // ─ Adaptive lerp factors, one per axis ─
@@ -481,7 +503,7 @@
     const alt = Math.max(-90, Math.min(90, smoothBeta - 90));
 
     // azimuth + small roll correction
-    const az  = ((compassAlpha + smoothGamma * 0.5) % 360 + 360) % 360;
+    const az  = ((compassAlpha + smoothGamma * 0.2) % 360 + 360) % 360;
 
     renderer.viewAz  = az;
     renderer.viewAlt = alt;
@@ -500,6 +522,9 @@
     prevRawAlpha = null;
     prevRawBeta  = null;
     prevRawGamma = null;
+    stationaryFrames = 0;
+    stationaryLock   = false;
+    orientationSource = null;
     sensorBuf.alpha.length = 0;
     sensorBuf.beta.length  = 0;
     sensorBuf.gamma.length = 0;
