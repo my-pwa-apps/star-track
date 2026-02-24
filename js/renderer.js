@@ -142,11 +142,31 @@ class SkyRenderer {
     }
 
     // ── Stars ────────────────────────────────────────────────
+    // Batch dim stars by colour into a single fill per group
+    const starBuckets = {};
     for (const s of this.stars) {
       if (s.alt < -2)         continue;
       if (s.mag > this.limitMag) continue;
       const { x, y } = project(s.alt, s.az);
-      this._drawStar(ctx, x, y, s, false);
+      // Bright stars or selected: draw individually (glow + ring)
+      if (s.mag < 2.0 || (this.selected && this.selected.name === s.name)) {
+        this._drawStar(ctx, x, y, s, false);
+      } else {
+        const color = spectralColor(s.spectral);
+        const size  = Math.max(0.5, (6 - s.mag) * 0.9);
+        if (!starBuckets[color]) starBuckets[color] = [];
+        starBuckets[color].push({ x, y, size });
+      }
+    }
+    // Flush batched dim stars
+    for (const [color, dots] of Object.entries(starBuckets)) {
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      for (const d of dots) {
+        ctx.moveTo(d.x + d.size, d.y);
+        ctx.arc(d.x, d.y, d.size, 0, Math.PI * 2);
+      }
+      ctx.fill();
     }
 
     // ── Sun / Moon / Planets ─────────────────────────────────
@@ -249,16 +269,11 @@ class SkyRenderer {
       const ny = vx*ez - vz*ex;
       const nz = vy*ex - vx*ey;
 
-      // If behind, we still want a direction, so we can just use the projection
-      // but we might need to flip it or just use the raw px/py for direction
-      const d = dot === 0 ? 0.0001 : dot;
-      // For direction, we don't want to flip the sign if it's behind, 
-      // otherwise the angle will be 180 degrees off.
-      // Wait, if dot < 0, dividing by d (negative) flips the sign, which is correct for direction!
-      // But if we want to draw it on screen, we might want to use Math.abs(d).
-      // Actually, for direction, we should just use d.
-      const px = (ox*ex + oy*ey + oz*ez) / (allowBehind ? Math.abs(d) : d) * scale;
-      const py = (ox*nx + oy*ny + oz*nz) / (allowBehind ? Math.abs(d) : d) * scale;
+      // When allowBehind, use |dot| so direction doesn't flip for objects behind the camera
+      const d  = dot === 0 ? 0.0001 : dot;
+      const dd = allowBehind ? Math.abs(d) : d;
+      const px = (ox*ex + oy*ey + oz*ez) / dd * scale;
+      const py = (ox*nx + oy*ny + oz*nz) / dd * scale;
 
       // Negate px: East tangent vector points West in the original formula → flip.
       // Use H/2 + py (not -py): Up tangent sign is also inverted.
@@ -318,12 +333,29 @@ class SkyRenderer {
     }
 
     // ── Stars ────────────────────────────────────────────────
+    const arStarBuckets = {};
     for (const s of this.stars) {
       if (s.alt < -5)          continue;
       if (s.mag > this.limitMag + 1) continue;
       const p = project(s.alt, s.az);
       if (!p || p.x < 0 || p.x > W || p.y < 0 || p.y > H) continue;
-      this._drawStar(ctx, p.x, p.y, s, true);
+      if (s.mag < 2.0 || (this.selected && this.selected.name === s.name)) {
+        this._drawStar(ctx, p.x, p.y, s, true);
+      } else {
+        const color = spectralColor(s.spectral);
+        const size  = Math.max(0.5, (6 - s.mag) * 1.2);
+        if (!arStarBuckets[color]) arStarBuckets[color] = [];
+        arStarBuckets[color].push({ x: p.x, y: p.y, size });
+      }
+    }
+    for (const [color, dots] of Object.entries(arStarBuckets)) {
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      for (const d of dots) {
+        ctx.moveTo(d.x + d.size, d.y);
+        ctx.arc(d.x, d.y, d.size, 0, Math.PI * 2);
+      }
+      ctx.fill();
     }
 
     // ── Sun / Moon / Planets ─────────────────────────────────
@@ -391,6 +423,7 @@ class SkyRenderer {
     ctx.save();
     ctx.strokeStyle = 'rgba(100,160,255,0.30)';
     ctx.lineWidth   = 0.8;
+    ctx.beginPath();
     for (const con of this.constellations) {
       if (!con.computedLines) continue;
       for (const { a1, a2 } of con.computedLines) {
@@ -402,12 +435,11 @@ class SkyRenderer {
         const p1 = project(a1.alt, a1.az);
         const p2 = project(a2.alt, a2.az);
         if (!p1 || !p2) continue;
-        ctx.beginPath();
         ctx.moveTo(p1.x, p1.y);
         ctx.lineTo(p2.x, p2.y);
-        ctx.stroke();
       }
     }
+    ctx.stroke();
     ctx.restore();
   }
 
@@ -418,16 +450,9 @@ class SkyRenderer {
     ctx.textAlign = 'center';
     for (const con of this.constellations) {
       if (!con.computedLines || con.computedLines.length === 0) continue;
-      // Use centroid of all line endpoints
-      let sumAlt = 0, sumAzX = 0, sumAzY = 0, n = 0;
-      for (const { a1, a2 } of con.computedLines) {
-        sumAlt += a1.alt + a2.alt;
-        sumAzX += Math.cos(a1.az * DEG) + Math.cos(a2.az * DEG);
-        sumAzY += Math.sin(a1.az * DEG) + Math.sin(a2.az * DEG);
-        n += 2;
-      }
-      const alt = sumAlt / n;
-      const az = Math.atan2(sumAzY, sumAzX) * RAD;
+      // Use precomputed centroid (falls back to recalc if missing)
+      const alt = con.labelAlt ?? 0;
+      const az  = con.labelAz  ?? 0;
       if (alt < 0) continue;
       const p = project(alt, az);
       if (!p) continue;

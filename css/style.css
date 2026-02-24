@@ -30,6 +30,7 @@
 
   /* Font */
   --font-lcars:   'Antonio', 'Segoe UI', system-ui, sans-serif;
+  --font-ui:      'Antonio', 'Segoe UI', system-ui, sans-serif;
   --font-mono:    'Share Tech Mono', 'Courier New', monospace;
 }
 
@@ -44,6 +45,7 @@ html, body {
   font-family: var(--font-lcars);
   letter-spacing: 0.04em;
   -webkit-tap-highlight-color: transparent;
+  -webkit-user-select: none;
   user-select: none;
   font-size: 14px;
 }
@@ -626,6 +628,7 @@ html, body {
   white-space: nowrap;
   padding-right: 60px;
   animation: ticker-scroll 40s linear infinite;
+  will-change: transform;
 }
 
 @keyframes ticker-scroll {
@@ -912,3 +915,16 @@ html, body {
 
 /* Search-bar needs position:relative so #search-results can be absolute inside it */
 #search-bar { position: relative; }
+
+/* ══════════════════════════════════════════════════════════
+   REDUCED MOTION
+══════════════════════════════════════════════════════════ */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+  #footer-ticker-text { animation: none; will-change: auto; }
+  .blink-dot { animation: none; opacity: 1; }
+}

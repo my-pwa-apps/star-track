@@ -51,7 +51,6 @@
   let prevRawAlpha  = null;
   let prevRawBeta   = null;
   let prevRawGamma  = null;
-  let lastSensorTs  = 0;
   let wakeLock      = null; // Screen Wake Lock handle
 
   // ── Init ───────────────────────────────────────────────────
@@ -91,8 +90,47 @@
     // Mode default
     switchToMap();
 
+    // Keyboard shortcuts
+    document.addEventListener('keydown', onKeyDown);
+
     // PWA: service worker + install/update prompts
     setupPWA();
+  }
+
+  // ── Keyboard shortcuts ────────────────────────────────────
+  function onKeyDown(e) {
+    // Ignore when typing in an input
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+
+    switch (e.key.toLowerCase()) {
+      case 'm': switchToMap();                    break;
+      case 'a': switchToAR();                     break;
+      case 'g': chkGrid.checked = !chkGrid.checked;
+                renderer.showGrid = chkGrid.checked;
+                syncToggle(chkGrid);              break;
+      case 'c': chkLines.checked = !chkLines.checked;
+                renderer.showConstellationLines = chkLines.checked;
+                syncToggle(chkLines);             break;
+      case 'n': chkNames.checked = !chkNames.checked;
+                renderer.showStarNames = chkNames.checked;
+                syncToggle(chkNames);             break;
+      case 'l': chkLabels.checked = !chkLabels.checked;
+                renderer.showConstellationLabels = chkLabels.checked;
+                syncToggle(chkLabels);            break;
+      case 'escape':
+        if (!searchBar.classList.contains('hidden')) { closeSearchBar(); break; }
+        if (!infoPanel.classList.contains('hidden')) {
+          infoPanel.classList.add('hidden');
+          renderer.selected = null;
+          renderer.highlightTarget = null;
+        }
+        break;
+      case '/': case 'f':
+        if (e.ctrlKey || e.metaKey) return; // let browser handle Ctrl+F
+        e.preventDefault();
+        toggleSearchBar();
+        break;
+    }
   }
 
   // ── Screen Wake Lock ──────────────────────────────────────────
@@ -120,7 +158,7 @@
     const updateDismiss  = document.getElementById('pwa-update-dismiss');
 
     // ── Register the service worker ──────────────────────────
-    navigator.serviceWorker.register('/sw.js').then(reg => {
+    navigator.serviceWorker.register('sw.js').then(reg => {
 
       // A new SW is waiting to take over → show update banner
       if (reg.waiting) showUpdateBanner(reg.waiting);
@@ -230,14 +268,24 @@
       return { ...s, alt, az };
     });
 
-    // Constellations with Alt/Az
+    // Constellations with Alt/Az + precomputed label centroid
     renderer.constellations = CONSTELLATIONS.map(c => {
       const lines = c.lines.map(([ra1, dec1, ra2, dec2]) => {
         const a1 = raDecToAltAz(ra1, dec1, lat, lon, date);
         const a2 = raDecToAltAz(ra2, dec2, lat, lon, date);
         return { a1, a2 };
       });
-      return { ...c, computedLines: lines };
+      // Precompute centroid for label placement
+      let sumAlt = 0, sumAzX = 0, sumAzY = 0, n = 0;
+      for (const { a1, a2 } of lines) {
+        sumAlt += a1.alt + a2.alt;
+        sumAzX += Math.cos(a1.az * DEG) + Math.cos(a2.az * DEG);
+        sumAzY += Math.sin(a1.az * DEG) + Math.sin(a2.az * DEG);
+        n += 2;
+      }
+      const labelAlt = n > 0 ? sumAlt / n : 0;
+      const labelAz  = n > 0 ? Math.atan2(sumAzY, sumAzX) * RAD : 0;
+      return { ...c, computedLines: lines, labelAlt, labelAz };
     });
 
     // Planets & Sun/Moon (need astronomy-engine loaded)
@@ -304,7 +352,6 @@
     orientation.alpha = e.alpha ?? orientation.alpha;
     orientation.beta  = e.beta  ?? orientation.beta;
     orientation.gamma = e.gamma ?? orientation.gamma;
-    lastSensorTs = e.timeStamp || performance.now();
   }
 
   function applyDeviceOrientation() {
@@ -492,10 +539,11 @@
     }
     // Planets
     for (const p of renderer.planets) {
+      const magStr = p.mag !== null ? ` · mag ${p.mag.toFixed(1)}` : '';
       items.push({
         id: p.name, type: 'planet', icon: p.symbol,
         name: p.name, abbr: '',
-        meta: p.alt > 0 ? `Alt ${formatAlt(p.alt)}` : 'Below horizon',
+        meta: (p.alt > 0 ? `Alt ${formatAlt(p.alt)}` : 'Below horizon') + magStr,
         obj: p,
       });
     }
@@ -567,6 +615,9 @@
       alt = obj.alt; az = obj.az;
       title = `${obj.symbol} ${obj.name}`;
       let extra = '';
+      if (obj.mag !== undefined && obj.mag !== null) {
+        extra += `<p>Visual magnitude: <b>${obj.mag.toFixed(2)}</b></p>`;
+      }
       if (type === 'moon' && obj.phase !== undefined) {
         extra = `<p>Phase: <b>${moonPhaseName(obj.phase)}</b> (${Math.round(obj.phase)}°)</p>`;
       }
@@ -622,7 +673,7 @@
         dragLastX = e.touches[0].clientX;
         dragLastY = e.touches[0].clientY;
         renderer.viewAz  = ((renderer.viewAz  - dx * 0.3) % 360 + 360) % 360;
-        renderer.viewAlt = Math.max(-10, Math.min(90, renderer.viewAlt + dy * 0.3));
+        renderer.viewAlt = Math.max(-90, Math.min(90, renderer.viewAlt + dy * 0.3));
         isDragging = true;
       }
     }, { passive: true });
@@ -640,9 +691,11 @@
     }, { passive: true });
 
     // Mouse drag (map rotation in map mode, pan in AR mode)
-    let mouseDown = false, lastMX, lastMY;
+    let mouseDown = false, startMX, startMY, lastMX, lastMY;
     canvas.addEventListener('mousedown', e => {
-      mouseDown = true; lastMX = e.clientX; lastMY = e.clientY;
+      mouseDown = true;
+      startMX = lastMX = e.clientX;
+      startMY = lastMY = e.clientY;
     });
     canvas.addEventListener('mousemove', e => {
       if (!mouseDown) return;
@@ -653,14 +706,16 @@
         renderer.mapRotation = ((renderer.mapRotation + dx * 0.3) % 360 + 360) % 360;
       } else {
         renderer.viewAz  = ((renderer.viewAz  - dx * 0.4) % 360 + 360) % 360;
-        renderer.viewAlt = Math.max(-10, Math.min(90, renderer.viewAlt + dy * 0.4));
+        renderer.viewAlt = Math.max(-90, Math.min(90, renderer.viewAlt + dy * 0.4));
         useDeviceOrientation = false;
       }
     });
     canvas.addEventListener('mouseup', e => {
-      const dx = e.clientX - lastMX, dy = e.clientY - lastMY;
-      if (Math.abs(dx) < 4 && Math.abs(dy) < 4) {
-        hitTestAt(e.clientX, e.clientY);
+      if (mouseDown) {
+        const dx = e.clientX - startMX, dy = e.clientY - startMY;
+        if (Math.abs(dx) < 4 && Math.abs(dy) < 4) {
+          hitTestAt(e.clientX, e.clientY);
+        }
       }
       mouseDown = false;
     });
