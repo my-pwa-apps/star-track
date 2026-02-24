@@ -3,21 +3,21 @@
 // Cache-first for local assets · Network-first for CDN
 // ============================================================
 
-const CACHE_VERSION = 'startrack-v6';
+const CACHE_VERSION = 'startrack-v7';
 const CDN_CACHE     = 'startrack-cdn-v1';
 
 const LOCAL_ASSETS = [
-  '/',
-  '/index.html',
-  '/css/style.css',
-  '/js/app.js',
-  '/js/astronomy.js',
-  '/js/renderer.js',
-  '/js/data/stars.js',
-  '/js/data/constellations.js',
-  '/manifest.json',
-  '/icons/icon.svg',
-  '/icons/icon-maskable.svg',
+  './',
+  './index.html',
+  './css/style.css',
+  './js/app.js',
+  './js/astronomy.js',
+  './js/renderer.js',
+  './js/data/stars.js',
+  './js/data/constellations.js',
+  './manifest.json',
+  './icons/icon.svg',
+  './icons/icon-maskable.svg',
 ];
 
 const CDN_ASSETS = [

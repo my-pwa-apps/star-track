@@ -158,7 +158,10 @@
     const updateDismiss  = document.getElementById('pwa-update-dismiss');
 
     // ── Register the service worker ──────────────────────────
+    let swRegistration = null;
+
     navigator.serviceWorker.register('sw.js').then(reg => {
+      swRegistration = reg;
 
       // A new SW is waiting to take over → show update banner
       if (reg.waiting) showUpdateBanner(reg.waiting);
@@ -171,7 +174,12 @@
           }
         });
       });
-    }).catch(() => { /* SW registration failed — non-critical */ });
+    }).catch(err => console.warn('SW registration failed:', err));
+
+    // Check for SW updates when the user returns to the tab
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden && swRegistration) swRegistration.update();
+    });
 
     // Reload once the new SW has taken control
     navigator.serviceWorker.addEventListener('controllerchange', () => {
