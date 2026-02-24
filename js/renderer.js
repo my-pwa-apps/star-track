@@ -153,7 +153,7 @@ class SkyRenderer {
     for (const obj of [...this.sunMoon, ...this.planets]) {
       if (obj.alt < -2) continue;
       const { x, y } = project(obj.alt, obj.az);
-      this._drawBodyIcon(ctx, x, y, obj, false);
+      this._drawBodyIcon(ctx, x, y, obj, false, project);
     }
 
     // ── Highlight ring for selected / target ─────────────────
@@ -216,7 +216,7 @@ class SkyRenderer {
     const fovH = this.fieldOfView / 2;
     const scale = (Math.min(W, H) / 2) / Math.tan(fovH * DEG);
 
-    const project = (alt, az) => {
+    const project = (alt, az, allowBehind = false) => {
       // Convert (alt,az) to unit vector in horizontal coords
       // Then project onto plane tangent at (viewAlt, viewAz)
       const altR  = alt * DEG;
@@ -236,7 +236,7 @@ class SkyRenderer {
 
       // dot product
       const dot = ox*vx + oy*vy + oz*vz;
-      if (dot <= 0) return null; // behind the projection plane
+      if (!allowBehind && dot <= 0) return null; // behind the projection plane
 
       // Tangent plane axes
       // East axis: perpendicular to view in horizontal plane
@@ -249,12 +249,20 @@ class SkyRenderer {
       const ny = vx*ez - vz*ex;
       const nz = vy*ex - vx*ey;
 
-      const px = (ox*ex + oy*ey + oz*ez) / dot * scale;
-      const py = (ox*nx + oy*ny + oz*nz) / dot * scale;
+      // If behind, we still want a direction, so we can just use the projection
+      // but we might need to flip it or just use the raw px/py for direction
+      const d = dot === 0 ? 0.0001 : dot;
+      // For direction, we don't want to flip the sign if it's behind, 
+      // otherwise the angle will be 180 degrees off.
+      // Wait, if dot < 0, dividing by d (negative) flips the sign, which is correct for direction!
+      // But if we want to draw it on screen, we might want to use Math.abs(d).
+      // Actually, for direction, we should just use d.
+      const px = (ox*ex + oy*ey + oz*ez) / (allowBehind ? Math.abs(d) : d) * scale;
+      const py = (ox*nx + oy*ny + oz*nz) / (allowBehind ? Math.abs(d) : d) * scale;
 
       // Negate px: East tangent vector points West in the original formula → flip.
       // Use H/2 + py (not -py): Up tangent sign is also inverted.
-      return { x: W/2 - px, y: H/2 + py };
+      return { x: W/2 - px, y: H/2 + py, behind: dot <= 0 };
     };
 
     // ── Alt/Az grid ──────────────────────────────────────────
@@ -322,7 +330,7 @@ class SkyRenderer {
     for (const obj of [...this.sunMoon, ...this.planets]) {
       const p = project(obj.alt, obj.az);
       if (!p || p.x < 0 || p.x > W || p.y < 0 || p.y > H) continue;
-      this._drawBodyIcon(ctx, p.x, p.y, obj, true);
+      this._drawBodyIcon(ctx, p.x, p.y, obj, true, project);
     }
 
     // ── Star names in AR ─────────────────────────────────────
@@ -367,20 +375,15 @@ class SkyRenderer {
     // Simplified Milky Way band – just a soft glow along the galactic plane
     ctx.save();
     ctx.globalAlpha = 0.06;
-    const mwPoints = [
-      [120, -65], [135,-60], [150,-50], [155,-35], [160,-20], [165,0],
-      [168, 15],  [175, 30], [183, 45], [190, 60],
-      [258,-60],  [260,-30], [265,-15], [270,0],   [272,15],  [276,35],
-      [285,55],   [295, 65], [310, 70], [315,50],
-    ];
-    const band = ctx.createLinearGradient(cx - R, cy, cx + R, cy);
+    ctx.translate(cx, cy);
+    const band = ctx.createLinearGradient(-R, 0, R, 0);
     band.addColorStop(0,   'transparent');
     band.addColorStop(0.3, 'rgba(200,220,255,0.3)');
     band.addColorStop(0.5, 'rgba(200,220,255,0.5)');
     band.addColorStop(0.7, 'rgba(200,220,255,0.3)');
     band.addColorStop(1,   'transparent');
     ctx.fillStyle = band;
-    ctx.fillRect(cx - R, cy - R, R * 2, R * 2);
+    ctx.fillRect(-R, -R, R * 2, R * 2);
     ctx.restore();
   }
 
@@ -389,9 +392,8 @@ class SkyRenderer {
     ctx.strokeStyle = 'rgba(100,160,255,0.30)';
     ctx.lineWidth   = 0.8;
     for (const con of this.constellations) {
-      for (const [ra1, dec1, ra2, dec2] of con.lines) {
-        const a1 = raDecToAltAz(ra1, dec1, this.lat, this.lon, this.date);
-        const a2 = raDecToAltAz(ra2, dec2, this.lat, this.lon, this.date);
+      if (!con.computedLines) continue;
+      for (const { a1, a2 } of con.computedLines) {
         if (ar) {
           if (a1.alt < -10 && a2.alt < -10) continue;
         } else {
@@ -415,15 +417,17 @@ class SkyRenderer {
     ctx.fillStyle = 'rgba(100,160,255,0.60)';
     ctx.textAlign = 'center';
     for (const con of this.constellations) {
-      if (!con.lines || con.lines.length === 0) continue;
+      if (!con.computedLines || con.computedLines.length === 0) continue;
       // Use centroid of all line endpoints
-      let sumRa = 0, sumDec = 0, n = 0;
-      for (const [ra1,dec1,ra2,dec2] of con.lines) {
-        sumRa  += ra1 + ra2;
-        sumDec += dec1 + dec2;
+      let sumAlt = 0, sumAzX = 0, sumAzY = 0, n = 0;
+      for (const { a1, a2 } of con.computedLines) {
+        sumAlt += a1.alt + a2.alt;
+        sumAzX += Math.cos(a1.az * DEG) + Math.cos(a2.az * DEG);
+        sumAzY += Math.sin(a1.az * DEG) + Math.sin(a2.az * DEG);
         n += 2;
       }
-      const { alt, az } = raDecToAltAz(sumRa/n, sumDec/n, this.lat, this.lon, this.date);
+      const alt = sumAlt / n;
+      const az = Math.atan2(sumAzY, sumAzX) * RAD;
       if (alt < 0) continue;
       const p = project(alt, az);
       if (!p) continue;
@@ -438,13 +442,16 @@ class SkyRenderer {
 
     // Glow for bright stars
     if (star.mag < 2.0) {
-      const glow = ctx.createRadialGradient(x, y, 0, x, y, size * 3.5);
+      ctx.save();
+      ctx.translate(x, y);
+      const glow = ctx.createRadialGradient(0, 0, 0, 0, 0, size * 3.5);
       glow.addColorStop(0,   color.replace(')', ',0.5)').replace('rgb', 'rgba'));
       glow.addColorStop(1,   'transparent');
       ctx.beginPath();
-      ctx.arc(x, y, size * 3.5, 0, Math.PI * 2);
+      ctx.arc(0, 0, size * 3.5, 0, Math.PI * 2);
       ctx.fillStyle = glow;
       ctx.fill();
+      ctx.restore();
     }
 
     // Highlight selected
@@ -462,7 +469,7 @@ class SkyRenderer {
     ctx.fill();
   }
 
-  _drawBodyIcon(ctx, x, y, obj, arMode) {
+  _drawBodyIcon(ctx, x, y, obj, arMode, project) {
     const r = obj.type === 'sun'  ? (arMode ? 22 : 14)
             : obj.type === 'moon' ? (arMode ? 18 : 11)
             : (arMode ? 10 : 7);
@@ -477,29 +484,51 @@ class SkyRenderer {
 
     if (obj.type === 'sun') {
       // Sun glow
-      const glow = ctx.createRadialGradient(x, y, 0, x, y, r * 2.5);
+      ctx.save();
+      ctx.translate(x, y);
+      const glow = ctx.createRadialGradient(0, 0, 0, 0, 0, r * 2.5);
       glow.addColorStop(0,   'rgba(255,220,50,0.8)');
       glow.addColorStop(0.4, 'rgba(255,150,0,0.4)');
       glow.addColorStop(1,   'transparent');
       ctx.beginPath();
-      ctx.arc(x, y, r * 2.5, 0, Math.PI * 2);
+      ctx.arc(0, 0, r * 2.5, 0, Math.PI * 2);
       ctx.fillStyle = glow;
       ctx.fill();
+      ctx.restore();
+
       ctx.beginPath();
       ctx.arc(x, y, r, 0, Math.PI * 2);
       ctx.fillStyle = '#FFE44D';
       ctx.fill();
     } else if (obj.type === 'moon') {
-      this._drawMoonPhase(ctx, x, y, r, obj.phase ?? 0);
+      let sunAngle = 0;
+      const sun = this.sunMoon.find(b => b.type === 'sun');
+      if (sun && project) {
+        // To get the correct angle on screen, we project both moon and sun
+        // without perspective division (orthographic) to avoid behind-camera issues.
+        // But since we don't have orthographic project, we can just project a point
+        // slightly towards the sun from the moon.
+        const dAz = (((sun.az - obj.az + 540) % 360) - 180);
+        const dAlt = sun.alt - obj.alt;
+        // Point slightly towards sun
+        const pDir = project(obj.alt + dAlt * 0.01, obj.az + dAz * 0.01, true);
+        if (pDir) {
+          sunAngle = Math.atan2(pDir.y - y, pDir.x - x);
+        }
+      }
+      this._drawMoonPhase(ctx, x, y, r, obj.phase ?? 0, sunAngle);
     } else {
       // Planet: colored circle + symbol
-      const grd = ctx.createRadialGradient(x-r*0.3, y-r*0.3, 0, x, y, r);
+      ctx.save();
+      ctx.translate(x, y);
+      const grd = ctx.createRadialGradient(-r*0.3, -r*0.3, 0, 0, 0, r);
       grd.addColorStop(0, obj.color);
       grd.addColorStop(1, this._darken(obj.color));
       ctx.beginPath();
-      ctx.arc(x, y, r, 0, Math.PI * 2);
+      ctx.arc(0, 0, r, 0, Math.PI * 2);
       ctx.fillStyle = grd;
       ctx.fill();
+      ctx.restore();
     }
 
     // Name label
@@ -513,54 +542,60 @@ class SkyRenderer {
 
   // ── Moon phase (crescent / gibbous / full) ────────────────
   // phase: 0=New, 90=First Quarter, 180=Full, 270=Last Quarter
-  _drawMoonPhase(ctx, x, y, r, phase) {
+  _drawMoonPhase(ctx, x, y, r, phase, sunAngle = 0) {
     const PA  = ((phase % 360) + 360) % 360;
     const lit  = 'rgba(212,212,192,0.95)';
     const dark = 'rgba(18,18,28,0.95)';
 
     ctx.save();
+    ctx.translate(x, y);
+    // Rotate so the illuminated side points towards the sun
+    // The default drawing assumes the sun is to the right (0 radians)
+    // We rotate the canvas by sunAngle
+    ctx.rotate(sunAngle);
+
     ctx.beginPath();
-    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.arc(0, 0, r, 0, Math.PI * 2);
     ctx.clip();
 
     if (PA < 180) {
       // Waxing: illuminated on the RIGHT side
       // Draw right half light
       ctx.beginPath();
-      ctx.arc(x, y, r, -Math.PI / 2, Math.PI / 2);
-      ctx.lineTo(x, y - r);
+      ctx.arc(0, 0, r, -Math.PI / 2, Math.PI / 2);
+      ctx.lineTo(0, -r);
       ctx.fillStyle = lit;
       ctx.fill();
       // Draw left half dark
       ctx.beginPath();
-      ctx.arc(x, y, r, Math.PI / 2, -Math.PI / 2);
-      ctx.lineTo(x, y + r);
+      ctx.arc(0, 0, r, Math.PI / 2, -Math.PI / 2);
+      ctx.lineTo(0, r);
       ctx.fillStyle = dark;
       ctx.fill();
       // Terminator ellipse
       const tw = r * Math.abs(Math.cos(PA * DEG));
       if (tw > 0.5) {
         ctx.beginPath();
-        ctx.ellipse(x, y, tw, r, 0, 0, Math.PI * 2);
+        ctx.ellipse(0, 0, tw, r, 0, 0, Math.PI * 2);
         ctx.fillStyle = PA < 90 ? dark : lit; // crescent → dark covers right nub; gibbous → light fills
         ctx.fill();
       }
     } else {
       // Waning: illuminated on the LEFT side
       ctx.beginPath();
-      ctx.arc(x, y, r, Math.PI / 2, -Math.PI / 2);
-      ctx.lineTo(x, y + r);
+      ctx.arc(0, 0, r, Math.PI / 2, -Math.PI / 2);
+      ctx.lineTo(0, r);
       ctx.fillStyle = lit;
       ctx.fill();
       ctx.beginPath();
-      ctx.arc(x, y, r, -Math.PI / 2, Math.PI / 2);
-      ctx.lineTo(x, y - r);
+      ctx.arc(0, 0, r, -Math.PI / 2, Math.PI / 2);
+      ctx.lineTo(0, -r);
       ctx.fillStyle = dark;
       ctx.fill();
       const tw = r * Math.abs(Math.cos(PA * DEG));
       if (tw > 0.5) {
         ctx.beginPath();
-        ctx.ellipse(x, y, tw, r, 0, 0, Math.PI * 2);
+        ctx.ellipse(0, 0, tw, r, 0, 0, Math.PI * 2);
         ctx.fillStyle = PA < 270 ? lit : dark; // gibbous → light fills waning right; crescent → dark
         ctx.fill();
       }

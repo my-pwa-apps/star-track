@@ -229,6 +229,16 @@
       return { ...s, alt, az };
     });
 
+    // Constellations with Alt/Az
+    renderer.constellations = CONSTELLATIONS.map(c => {
+      const lines = c.lines.map(([ra1, dec1, ra2, dec2]) => {
+        const a1 = raDecToAltAz(ra1, dec1, lat, lon, date);
+        const a2 = raDecToAltAz(ra2, dec2, lat, lon, date);
+        return { a1, a2 };
+      });
+      return { ...c, computedLines: lines };
+    });
+
     // Planets & Sun/Moon (need astronomy-engine loaded)
     if (typeof Astronomy !== 'undefined') {
       renderer.planets = getPlanets(lat, lon, date);
