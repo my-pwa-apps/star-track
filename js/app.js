@@ -722,8 +722,21 @@
       if (renderer.mode === 'ar') {
         renderer.viewAz  = az;
         renderer.viewAlt = Math.max(0, alt);
-        useDeviceOrientation = false; // pause sensor for a moment
-        setTimeout(() => { if (renderer.mode === 'ar') useDeviceOrientation = true; }, 3000);
+        useDeviceOrientation = false; // pause sensor so the selected object stays centred
+        setTimeout(() => {
+          if (renderer.mode === 'ar') {
+            // Sync LERP start-points to current view before re-enabling sensor
+            // so the view transitions smoothly rather than snapping.
+            compassAlpha     = renderer.viewAz;
+            smoothBeta       = renderer.viewAlt + 90;
+            prevRawAlpha     = null;
+            prevRawBeta      = null;
+            prevRawGamma     = null;
+            stationaryFrames = 0;
+            stationaryLock   = false;
+            useDeviceOrientation = true;
+          }
+        }, 3000);
       }
     }
 
@@ -755,7 +768,10 @@
         dragLastY = e.touches[0].clientY;
         renderer.viewAz  = ((renderer.viewAz  - dx * 0.3) % 360 + 360) % 360;
         renderer.viewAlt = Math.max(-90, Math.min(90, renderer.viewAlt + dy * 0.3));
-        isDragging = true;
+        if (!isDragging) {
+          isDragging = true;
+          useDeviceOrientation = false; // pause sensor while finger is dragging
+        }
       }
     }, { passive: true });
 
@@ -767,6 +783,21 @@
       if (dist < 10 && dt < 300) {
         // Tap = select
         hitTestAt(e.changedTouches[0].clientX, e.changedTouches[0].clientY);
+      } else if (isDragging && renderer.mode === 'ar') {
+        // Re-enable sensor after drag, syncing LERP state to the dragged position
+        // so the view transitions smoothly to sensor rather than snapping back.
+        setTimeout(() => {
+          if (renderer.mode === 'ar') {
+            compassAlpha     = renderer.viewAz;
+            smoothBeta       = renderer.viewAlt + 90;
+            prevRawAlpha     = null;
+            prevRawBeta      = null;
+            prevRawGamma     = null;
+            stationaryFrames = 0;
+            stationaryLock   = false;
+            useDeviceOrientation = true;
+          }
+        }, 800);
       }
       isDragging = false;
     }, { passive: true });
@@ -796,6 +827,20 @@
         const dx = e.clientX - startMX, dy = e.clientY - startMY;
         if (Math.abs(dx) < 4 && Math.abs(dy) < 4) {
           hitTestAt(e.clientX, e.clientY);
+        } else if (renderer.mode === 'ar') {
+          // Re-enable sensor after mouse drag, synced to current view
+          setTimeout(() => {
+            if (renderer.mode === 'ar') {
+              compassAlpha     = renderer.viewAz;
+              smoothBeta       = renderer.viewAlt + 90;
+              prevRawAlpha     = null;
+              prevRawBeta      = null;
+              prevRawGamma     = null;
+              stationaryFrames = 0;
+              stationaryLock   = false;
+              useDeviceOrientation = true;
+            }
+          }, 1200);
         }
       }
       mouseDown = false;

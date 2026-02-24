@@ -3,6 +3,10 @@
 // Two render modes: 'map' (full hemisphere) and 'ar' (look-through)
 // ============================================================
 
+// ── Canvas font stacks (mirror CSS theme variables) ──────────
+const FONT_LCARS = '"Antonio", "Segoe UI", sans-serif';
+const FONT_MONO  = '"Share Tech Mono", "Courier New", monospace';
+
 class SkyRenderer {
   constructor(canvas) {
     this.canvas = canvas;
@@ -395,8 +399,8 @@ class SkyRenderer {
     // ── AR crosshair ─────────────────────────────────────────
     this._drawCrosshair(ctx, W / 2, H / 2);
 
-    // ── HUD: current pointing info ───────────────────────────
-    this._drawHUD(ctx, W, H);
+    // ── AR compass bearing strip (HUD overlay at top) ─────────
+    this._drawARCompassStrip(ctx, W, H);
   }
 
   // ═══════════════════════════════════════════════════════════
@@ -404,18 +408,43 @@ class SkyRenderer {
   // ═══════════════════════════════════════════════════════════
 
   _drawMilkyWay(ctx, cx, cy, R, project) {
-    // Simplified Milky Way band – just a soft glow along the galactic plane
+    // Orient the Milky Way band along the actual galactic plane by projecting
+    // the galactic centre (RA 266.4°, Dec −29°) and anti-centre (RA 86.4°, Dec +29°)
+    // onto the map. This ensures the band rotates correctly with mapRotation.
+    const gc  = raDecToAltAz(266.4, -29.0, this.lat, this.lon, this.date);
+    const gac = raDecToAltAz( 86.4,  29.0, this.lat, this.lon, this.date);
+    const p1  = project(gc.alt,  gc.az);
+    const p2  = project(gac.alt, gac.az);
+
+    // Axis direction and perpendicular (across the band)
+    const dx  = p2.x - p1.x;
+    const dy  = p2.y - p1.y;
+    const len = Math.sqrt(dx * dx + dy * dy) || 1;
+    const nx  =  dy / len;   // perpendicular
+    const ny  = -dx / len;
+
+    const bandHalf = R * 0.55;   // half-width of glow band in px
+    const bx = (p1.x + p2.x) / 2;
+    const by = (p1.y + p2.y) / 2;
+
     ctx.save();
-    ctx.globalAlpha = 0.06;
-    ctx.translate(cx, cy);
-    const band = ctx.createLinearGradient(-R, 0, R, 0);
+    ctx.globalAlpha = 0.08;
+
+    // Gradient is perpendicular to galactic axis
+    const gx1 = bx - nx * bandHalf, gy1 = by - ny * bandHalf;
+    const gx2 = bx + nx * bandHalf, gy2 = by + ny * bandHalf;
+    const band = ctx.createLinearGradient(gx1, gy1, gx2, gy2);
     band.addColorStop(0,   'transparent');
-    band.addColorStop(0.3, 'rgba(200,220,255,0.3)');
-    band.addColorStop(0.5, 'rgba(200,220,255,0.5)');
-    band.addColorStop(0.7, 'rgba(200,220,255,0.3)');
+    band.addColorStop(0.3, 'rgba(200,220,255,0.30)');
+    band.addColorStop(0.5, 'rgba(200,220,255,0.55)');
+    band.addColorStop(0.7, 'rgba(200,220,255,0.30)');
     band.addColorStop(1,   'transparent');
     ctx.fillStyle = band;
-    ctx.fillRect(-R, -R, R * 2, R * 2);
+
+    // Rotate canvas to align with galactic axis, fill wide rect
+    ctx.translate(bx, by);
+    ctx.rotate(Math.atan2(dy, dx));
+    ctx.fillRect(-R * 2, -bandHalf, R * 4, bandHalf * 2);
     ctx.restore();
   }
 
@@ -445,7 +474,7 @@ class SkyRenderer {
 
   _drawConstellationLabels(ctx, project) {
     ctx.save();
-    ctx.font      = '10px "Segoe UI", sans-serif';
+    ctx.font      = `10px ${FONT_LCARS}`;
     ctx.fillStyle = 'rgba(100,160,255,0.60)';
     ctx.textAlign = 'center';
     for (const con of this.constellations) {
@@ -559,7 +588,7 @@ class SkyRenderer {
     // Name label
     ctx.save();
     ctx.fillStyle = obj.color || '#ffffff';
-    ctx.font      = `${arMode ? 11 : 9}px "Segoe UI", sans-serif`;
+    ctx.font      = `${arMode ? 11 : 9}px ${FONT_LCARS}`;
     ctx.textAlign = 'left';
     ctx.fillText(obj.name, x + r + 3, y + 4);
     ctx.restore();
@@ -668,7 +697,7 @@ class SkyRenderer {
       const rr     = R + (isCard ? 12 : 10);
       const x      = cx + rr * Math.sin(angle);
       const y      = cy - rr * Math.cos(angle);
-      ctx.font      = isCard ? 'bold 13px sans-serif' : '10px sans-serif';
+      ctx.font      = isCard ? `bold 13px ${FONT_LCARS}` : `10px ${FONT_LCARS}`;
       ctx.fillStyle = isCard ? 'rgba(255,255,255,0.9)' : 'rgba(255,255,255,0.5)';
       ctx.fillText(d.label, x, y);
     }
@@ -706,22 +735,69 @@ class SkyRenderer {
     ctx.restore();
   }
 
-  _drawHUD(ctx, W, H) {
+  _drawARCompassStrip(ctx, W, H) {
+    // Bearing ribbon at the top of the AR view: shows cardinal directions
+    // within the current horizontal FOV so the user can orient themselves.
+    const STRIP_H  = 26;
+    const pxPerDeg = W / this.fieldOfView;   // linear px-per-degree scale
+
     ctx.save();
-    ctx.fillStyle = 'rgba(0,0,0,0.45)';
-    ctx.fillRect(8, H - 44, 180, 36);
-    ctx.fillStyle = 'rgba(150,200,255,0.9)';
-    ctx.font = '12px monospace';
-    ctx.textAlign = 'left';
-    ctx.textBaseline = 'top';
-    ctx.fillText(`Az: ${formatAz(this.viewAz)}`, 14, H - 38);
-    ctx.fillText(`Alt: ${formatAlt(this.viewAlt)}`, 14, H - 22);
+
+    // Background
+    ctx.fillStyle = 'rgba(0,0,0,0.58)';
+    ctx.fillRect(0, 0, W, STRIP_H);
+
+    // Bottom border
+    ctx.strokeStyle = 'rgba(255,153,0,0.55)';
+    ctx.lineWidth   = 1;
+    ctx.beginPath();
+    ctx.moveTo(0, STRIP_H); ctx.lineTo(W, STRIP_H);
+    ctx.stroke();
+
+    ctx.textAlign    = 'center';
+    ctx.textBaseline = 'middle';
+
+    for (let az = 0; az < 360; az += 5) {
+      // Shortest-arc diff so wrap at 0/360 is handled correctly
+      let diff = az - this.viewAz;
+      if (diff >  180) diff -= 360;
+      if (diff < -180) diff += 360;
+
+      const x = W / 2 + diff * pxPerDeg;
+      if (x < -1 || x > W + 1) continue;
+
+      if (az % 45 === 0) {
+        const LABELS = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
+        const label  = LABELS[az / 45];
+        ctx.strokeStyle = 'rgba(255,153,0,0.90)';
+        ctx.lineWidth   = 1.5;
+        ctx.beginPath(); ctx.moveTo(x, STRIP_H - 7); ctx.lineTo(x, STRIP_H); ctx.stroke();
+        ctx.font      = `bold 9px ${FONT_LCARS}`;
+        // Highlight N in teal to make it pop
+        ctx.fillStyle = label === 'N' ? 'rgba(102,204,255,0.95)' : 'rgba(255,153,0,0.95)';
+        ctx.fillText(label, x, STRIP_H / 2 - 1);
+      } else if (az % 15 === 0) {
+        ctx.strokeStyle = 'rgba(255,153,0,0.50)';
+        ctx.lineWidth   = 1;
+        ctx.beginPath(); ctx.moveTo(x, STRIP_H - 5); ctx.lineTo(x, STRIP_H); ctx.stroke();
+      } else {
+        ctx.strokeStyle = 'rgba(255,153,0,0.22)';
+        ctx.lineWidth   = 0.8;
+        ctx.beginPath(); ctx.moveTo(x, STRIP_H - 3); ctx.lineTo(x, STRIP_H); ctx.stroke();
+      }
+    }
+
+    // Centre pointer marks where the crosshair is pointing
+    ctx.strokeStyle = 'rgba(255,255,255,0.65)';
+    ctx.lineWidth   = 1.5;
+    ctx.beginPath(); ctx.moveTo(W / 2, STRIP_H - 5); ctx.lineTo(W / 2, STRIP_H); ctx.stroke();
+
     ctx.restore();
   }
 
   _drawLabel(ctx, x, y, text, color, size) {
     ctx.save();
-    ctx.font      = `${size}px "Segoe UI", sans-serif`;
+    ctx.font      = `${size}px ${FONT_LCARS}`;
     ctx.fillStyle = color;
     ctx.textAlign = 'left';
     ctx.fillText(text, x, y);

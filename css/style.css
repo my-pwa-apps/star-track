@@ -702,7 +702,7 @@ html, body {
 #info-panel-body {
   padding: 12px 14px;
   overflow-y: auto;
-  max-height: 200px;
+  max-height: 240px;
 }
 /* h3 in body is redundant (name already in panel header); hide it cleanly */
 #info-panel-body h3 {
