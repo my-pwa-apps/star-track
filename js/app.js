@@ -51,6 +51,7 @@
   let prevRawAlpha  = null;
   let prevRawBeta   = null;
   let prevRawGamma  = null;
+  let lastSensorTs  = 0;
   let wakeLock      = null; // Screen Wake Lock handle
 
   // ── Init ───────────────────────────────────────────────────
@@ -303,6 +304,7 @@
     orientation.alpha = e.alpha ?? orientation.alpha;
     orientation.beta  = e.beta  ?? orientation.beta;
     orientation.gamma = e.gamma ?? orientation.gamma;
+    lastSensorTs = e.timeStamp || performance.now();
   }
 
   function applyDeviceOrientation() {
@@ -313,9 +315,15 @@
     //   LERP_MIN : used when nearly stationary  → tight noise rejection
     //   LERP_MAX : used at fast deliberate sweeps → full responsiveness
     //   VEL_FULL : °/frame velocity that saturates to LERP_MAX
-    const LERP_MIN = 0.03;
+    const LERP_MIN = 0.012;
     const LERP_MAX = 0.20;
     const VEL_FULL = 5.0; // degrees per frame
+    const DEADBAND_A = 0.18;
+    const DEADBAND_B = 0.12;
+    const DEADBAND_G = 0.18;
+    const SPIKE_A = 35;
+    const SPIKE_B = 25;
+    const SPIKE_G = 35;
 
     const targetAlpha = orientation.alpha;
     const targetBeta  = orientation.beta  ?? 135; // default to looking up at 45°
@@ -327,10 +335,19 @@
       let da = targetAlpha - prevRawAlpha;
       if (da >  180) da -= 360;          // shortest arc
       if (da < -180) da += 360;
+      if (Math.abs(da) > SPIKE_A) da = 0;
       velA = Math.abs(da);
     }
-    if (prevRawBeta  !== null) velB = Math.abs(targetBeta  - prevRawBeta);
-    if (prevRawGamma !== null) velG = Math.abs(targetGamma - prevRawGamma);
+    if (prevRawBeta  !== null) {
+      let db = targetBeta - prevRawBeta;
+      if (Math.abs(db) > SPIKE_B) db = 0;
+      velB = Math.abs(db);
+    }
+    if (prevRawGamma !== null) {
+      let dg = targetGamma - prevRawGamma;
+      if (Math.abs(dg) > SPIKE_G) dg = 0;
+      velG = Math.abs(dg);
+    }
     prevRawAlpha = targetAlpha;
     prevRawBeta  = targetBeta;
     prevRawGamma = targetGamma;
@@ -345,15 +362,20 @@
     let diffA = targetAlpha - compassAlpha;
     if (diffA >  180) diffA -= 360;
     if (diffA < -180) diffA += 360;
+    if (Math.abs(diffA) < DEADBAND_A) diffA = 0;
     compassAlpha = (compassAlpha + diffA * lerpA + 360) % 360;
 
     // ─ Tilt / altitude (beta) ─
     if (smoothBeta === null) smoothBeta = targetBeta;
-    smoothBeta += (targetBeta - smoothBeta) * lerpB;
+    let diffB = targetBeta - smoothBeta;
+    if (Math.abs(diffB) < DEADBAND_B) diffB = 0;
+    smoothBeta += diffB * lerpB;
 
     // ─ Roll correction (gamma) ─
     if (smoothGamma === null) smoothGamma = targetGamma;
-    smoothGamma += (targetGamma - smoothGamma) * lerpG;
+    let diffG = targetGamma - smoothGamma;
+    if (Math.abs(diffG) < DEADBAND_G) diffG = 0;
+    smoothGamma += diffG * lerpG;
 
     // altitude = beta - 90 (beta=90 → horizon, beta=180 → zenith, beta=0 → nadir)
     const alt = Math.max(-90, Math.min(90, smoothBeta - 90));
