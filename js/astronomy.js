@@ -89,8 +89,10 @@ function getPlanets(lat, lon, date = new Date()) {
   const planets = [];
   for (const b of bodies) {
     try {
-      const eq  = Astronomy.Equator(b.id, astroDate, observer, true, true);
-      const hor = Astronomy.Horizon(astroDate, observer, eq.ra, eq.dec, 'normal');
+      const eq    = Astronomy.Equator(b.id, astroDate, observer, true, true);
+      const hor   = Astronomy.Horizon(astroDate, observer, eq.ra, eq.dec, 'normal');
+      let   mag   = null;
+      try { mag = Astronomy.Illumination(b.id, astroDate).mag; } catch(_) {}
       planets.push({
         name:   b.name,
         symbol: b.symbol,
@@ -99,6 +101,7 @@ function getPlanets(lat, lon, date = new Date()) {
         dec:    eq.dec,
         alt:    hor.altitude,
         az:     hor.azimuth,
+        mag:    mag,
         type:   'planet',
       });
     } catch (e) {

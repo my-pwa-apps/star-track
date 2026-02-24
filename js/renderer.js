@@ -252,7 +252,9 @@ class SkyRenderer {
       const px = (ox*ex + oy*ey + oz*ez) / dot * scale;
       const py = (ox*nx + oy*ny + oz*nz) / dot * scale;
 
-      return { x: W/2 + px, y: H/2 - py };
+      // Negate px: East tangent vector points West in the original formula → flip.
+      // Use H/2 + py (not -py): Up tangent sign is also inverted.
+      return { x: W/2 - px, y: H/2 + py };
     };
 
     // ── Alt/Az grid ──────────────────────────────────────────
@@ -488,10 +490,7 @@ class SkyRenderer {
       ctx.fillStyle = '#FFE44D';
       ctx.fill();
     } else if (obj.type === 'moon') {
-      ctx.beginPath();
-      ctx.arc(x, y, r, 0, Math.PI * 2);
-      ctx.fillStyle = '#d4d4c0';
-      ctx.fill();
+      this._drawMoonPhase(ctx, x, y, r, obj.phase ?? 0);
     } else {
       // Planet: colored circle + symbol
       const grd = ctx.createRadialGradient(x-r*0.3, y-r*0.3, 0, x, y, r);
@@ -509,6 +508,63 @@ class SkyRenderer {
     ctx.font      = `${arMode ? 11 : 9}px "Segoe UI", sans-serif`;
     ctx.textAlign = 'left';
     ctx.fillText(obj.name, x + r + 3, y + 4);
+    ctx.restore();
+  }
+
+  // ── Moon phase (crescent / gibbous / full) ────────────────
+  // phase: 0=New, 90=First Quarter, 180=Full, 270=Last Quarter
+  _drawMoonPhase(ctx, x, y, r, phase) {
+    const PA  = ((phase % 360) + 360) % 360;
+    const lit  = 'rgba(212,212,192,0.95)';
+    const dark = 'rgba(18,18,28,0.95)';
+
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.clip();
+
+    if (PA < 180) {
+      // Waxing: illuminated on the RIGHT side
+      // Draw right half light
+      ctx.beginPath();
+      ctx.arc(x, y, r, -Math.PI / 2, Math.PI / 2);
+      ctx.lineTo(x, y - r);
+      ctx.fillStyle = lit;
+      ctx.fill();
+      // Draw left half dark
+      ctx.beginPath();
+      ctx.arc(x, y, r, Math.PI / 2, -Math.PI / 2);
+      ctx.lineTo(x, y + r);
+      ctx.fillStyle = dark;
+      ctx.fill();
+      // Terminator ellipse
+      const tw = r * Math.abs(Math.cos(PA * DEG));
+      if (tw > 0.5) {
+        ctx.beginPath();
+        ctx.ellipse(x, y, tw, r, 0, 0, Math.PI * 2);
+        ctx.fillStyle = PA < 90 ? dark : lit; // crescent → dark covers right nub; gibbous → light fills
+        ctx.fill();
+      }
+    } else {
+      // Waning: illuminated on the LEFT side
+      ctx.beginPath();
+      ctx.arc(x, y, r, Math.PI / 2, -Math.PI / 2);
+      ctx.lineTo(x, y + r);
+      ctx.fillStyle = lit;
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(x, y, r, -Math.PI / 2, Math.PI / 2);
+      ctx.lineTo(x, y - r);
+      ctx.fillStyle = dark;
+      ctx.fill();
+      const tw = r * Math.abs(Math.cos(PA * DEG));
+      if (tw > 0.5) {
+        ctx.beginPath();
+        ctx.ellipse(x, y, tw, r, 0, 0, Math.PI * 2);
+        ctx.fillStyle = PA < 270 ? lit : dark; // gibbous → light fills waning right; crescent → dark
+        ctx.fill();
+      }
+    }
     ctx.restore();
   }
 
@@ -677,7 +733,7 @@ class SkyRenderer {
         const nx = vz*ey, ny = -vz*ex, nz = vy*ex - vx*ey;
         const px = (ox*ex + oy*ey) / dot * scale;
         const py = (ox*nx + oy*ny + oz*nz) / dot * scale;
-        return { x: W/2 + px, y: H/2 - py };
+        return { x: W/2 - px, y: H/2 + py }; // signs match _renderAR fix
       };
     }
   }

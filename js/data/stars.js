@@ -42,12 +42,12 @@ const STAR_CATALOG = [
   [41037, "Sargas",       264.3298, -42.9978,   1.87, "F1II",  "Sco"],
   [5447,  "Menkent",      211.6707, -36.3699,   2.06, "K0IIIb","Cen"],
   [59747, "Peacock",      306.4119, -56.7350,   1.94, "B2IV",  "Pav"],
-  [85927, "Mimosa",       193.9003, -59.6886,   1.98, "B2V",   "Cru"],
+  // [85927] entry removed — RA 193.90° does not correspond to any recognised named star
   [102488,"Albaldah",     275.2469, -29.8281,   2.02, "F2II",  "Sgr"],
   [44816, "Alphard",      141.8969,  -8.6586,   1.99, "K3II",  "Hya"],
   [80331, "Hamal",        31.7933,   23.4624,   2.00, "K2III", "Ari"],
   [15863, "Polaris",      37.9529,   89.2641,   1.97, "F7Ib",  "UMi"],
-  [113963,"Formalhaut B", 344.3946, -29.6222,   2.02, "K4V",   "PsA"],
+  [113963,"TW PsA",       344.3946, -29.6222,   6.48, "K4.5V", "PsA"],  // companion of Fomalhaut; correct mag
   [17851, "Algenib",      3.3082,    15.1836,   2.02, "B2IV",  "Peg"],
   [97649, "Altair",       297.6958,   8.8683,   0.77, "A7Vn",  "Aql"],
   [39429, "Mintaka",      83.0016,   -0.2992,   2.20, "O9.5II","Ori"],
