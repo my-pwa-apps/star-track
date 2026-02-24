@@ -56,7 +56,7 @@
   // ── Sensor ring buffer (multi-sample averaging) ────────────
   // Sensors fire at ~60 Hz; accumulate readings between animation frames
   // and average them to reject high-frequency noise before LERP.
-  const SENSOR_BUF_SIZE = 6;
+  const SENSOR_BUF_SIZE = 12;
   const sensorBuf = { alpha: [], beta: [], gamma: [] };
 
   // ── Init ───────────────────────────────────────────────────
@@ -411,15 +411,16 @@
 
     // Adaptive LERP — scales with angular velocity so the view stays rock-
     // steady when held still (noise rejected) yet snaps when panning.
-    const LERP_MIN = 0.008;
+    const LERP_MIN = 0.006;
     const LERP_MAX = 0.25;
     const VEL_FULL = 4.0; // degrees per frame to saturate at LERP_MAX
-    const DEADBAND_A = 0.25;
-    const DEADBAND_B = 0.18;
-    const DEADBAND_G = 0.25;
+    const DEADBAND_A = 0.4;
+    const DEADBAND_B = 0.3;
+    const DEADBAND_G = 0.4;
     const SPIKE_A = 35;
     const SPIKE_B = 25;
     const SPIKE_G = 35;
+    const STATIONARY_VEL = 0.5; // °/frame — below this on ALL axes → freeze
 
     // ─ Per-axis instantaneous velocity (degrees since last frame) ─
     let velA = 0, velB = 0, velG = 0;
@@ -443,6 +444,13 @@
     prevRawAlpha = targetAlpha;
     prevRawBeta  = targetBeta;
     prevRawGamma = targetGamma;
+
+    // ─ Motion gate: if all axes are below stationary threshold, freeze ─
+    // This prevents sensor noise from slowly drifting the view when the
+    // device is completely still (e.g. lying on a table).
+    if (velA < STATIONARY_VEL && velB < STATIONARY_VEL && velG < STATIONARY_VEL) {
+      return; // skip entire LERP update — the device isn't moving
+    }
 
     // ─ Adaptive lerp factors, one per axis ─
     const lerpA = LERP_MIN + (LERP_MAX - LERP_MIN) * Math.min(velA / VEL_FULL, 1);
