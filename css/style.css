@@ -81,7 +81,7 @@ html, body {
 /* ── Elbow (top-left corner chrome piece) ── */
 #lcars-elbow {
   flex-shrink: 0;
-  width: calc(var(--sidebar-w) - 0px);
+  width: var(--sidebar-w);
   display: flex;
   flex-direction: column;
   pointer-events: none;
@@ -96,24 +96,10 @@ html, body {
   flex: 1;
   width: calc(var(--sidebar-w) - 60px);
   background: var(--lc-orange);
-  border-radius: 0 0 0 0;
 }
 
-/* ── Header separator gap ── */
-#lcars-header::after {
-  content: none;
-}
-
-/* Black gap between elbow and title */
+/* Title band (next to elbow, separated by 4px orange right-border) */
 #header-title-band {
-  width: 8px;
-  background: var(--lc-bg);
-  align-self: stretch;
-}
-
-/* Repurpose it as a real title band by resetting width */
-#header-title-band {
-  width: auto;
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
@@ -202,8 +188,9 @@ html, body {
   transition: filter 0.15s, transform 0.08s;
   line-height: 1.2;
 }
-.lcars-btn:hover  { filter: brightness(1.2); }
-.lcars-btn:active { transform: scale(0.95); filter: brightness(0.9); }
+.lcars-btn:hover        { filter: brightness(1.2); }
+.lcars-btn:active       { transform: scale(0.95); filter: brightness(0.9); }
+.lcars-btn:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
 
 .btn-orange { background: var(--lc-orange); color: #000; }
 .btn-purple { background: var(--lc-purple); color: #fff; }
@@ -218,9 +205,9 @@ html, body {
   padding: 5px 10px;
 }
 
-/* Active / selected state */
+/* Active / selected state — mode buttons */
 .lcars-btn.active {
-  box-shadow: 0 0 0 2px #fff, 0 0 12px currentColor;
+  box-shadow: inset 0 0 0 2px rgba(255,255,255,0.5), 0 0 14px currentColor;
 }
 
 /* ══════════════════════════════════════════════════════════
@@ -232,7 +219,6 @@ html, body {
   border-bottom: 3px solid var(--lc-orange);
   z-index: 110;
 }
-#search-bar.hidden { display: none; }
 
 #search-bar-inner {
   display: flex;
@@ -326,8 +312,8 @@ html, body {
   flex-shrink: 0;
 }
 .sb-orange { background: var(--lc-orange); }
-.sb-purple { background: var(--lc-purple); height: 14px; }
-.sb-blue   { background: var(--lc-blue);   height: 10px; }
+.sb-purple { background: var(--lc-purple); height: 14px; margin-top: 2px; }
+.sb-blue   { background: var(--lc-blue); }
 
 /* Section labels */
 .sb-section-label {
@@ -362,8 +348,9 @@ html, body {
   transition: filter 0.12s, transform 0.08s;
   white-space: nowrap;
 }
-.filter-btn:hover  { filter: brightness(1.25); }
-.filter-btn:active { transform: scaleX(0.97); }
+.filter-btn:hover        { filter: brightness(1.25); }
+.filter-btn:active       { transform: scaleX(0.97); }
+.filter-btn:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
 .filter-btn.active {
   background: var(--lc-yellow);
   box-shadow: 2px 0 8px rgba(255,204,0,0.5);
@@ -384,7 +371,13 @@ html, body {
   cursor: pointer;
   padding: 1px 0;
 }
-.toggle-row input[type=checkbox] { display: none; }
+.toggle-row input[type=checkbox] {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+}
 
 .t-track {
   position: relative;
@@ -406,10 +399,7 @@ html, body {
   left: 2px;
   transition: transform 0.2s, background 0.2s;
 }
-.toggle-row input:checked ~ .t-track {
-  /* sibling — CSS can't select like this without JS, we use class toggling in app.js */
-}
-/* .t-track.on set by JS */
+/* .t-track.on toggled by JS (CSS adjacent-sibling can't skip hidden inputs) */
 .t-track.on {
   background: rgba(255,153,0,0.2);
   border-color: var(--lc-orange);
@@ -711,13 +701,9 @@ html, body {
   overflow-y: auto;
   max-height: 200px;
 }
+/* h3 in body is redundant (name already in panel header); hide it cleanly */
 #info-panel-body h3 {
-  font-size: 17px;
-  font-weight: 700;
-  color: var(--lc-yellow);
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  margin-bottom: 8px;
+  display: none;
 }
 #info-panel-body p {
   font-size: 11px;
@@ -756,7 +742,29 @@ html, body {
 ::-webkit-scrollbar-thumb { background: var(--lc-dim); border-radius: 2px; }
 
 /* ══════════════════════════════════════════════════════════
-   MOBILE — collapse sidebar to bottom strip
+   MOBILE BOTTOM NAV (hidden on desktop)
+══════════════════════════════════════════════════════════ */
+#mobile-nav {
+  display: none; /* shown via media query */
+  align-items: stretch;
+  background: var(--lc-bg);
+  border-top: 3px solid var(--lc-orange);
+  flex-shrink: 0;
+  z-index: 90;
+}
+
+#mobile-nav .filter-btn {
+  flex: 1;
+  border-radius: 0;
+  padding: 10px 4px;
+  text-align: center;
+  border-right: 1px solid rgba(255,153,0,0.2);
+  font-size: 10px;
+}
+#mobile-nav .filter-btn:last-child { border-right: none; }
+
+/* ══════════════════════════════════════════════════════════
+   MOBILE — compact header + show bottom nav
 ══════════════════════════════════════════════════════════ */
 @media (max-width: 600px) {
   :root {
@@ -769,42 +777,35 @@ html, body {
     grid-template-rows: var(--header-h) auto 1fr auto var(--footer-h);
   }
 
-  /* Hide desktop sidebar */
+  /* Hide desktop sidebar, show mobile nav */
   #lcars-sidebar { display: none; }
+  #mobile-nav    { display: flex; }
 
   /* Compact header */
   #lcars-elbow       { display: none; }
   #header-title-band { border-right: none; min-width: unset; }
   #app-subtitle      { display: none; }
-  #app-title         { font-size: 18px; }
+  #app-title         { font-size: 17px; }
   #header-data-band .data-cell:nth-child(3) { display: none; }
   .data-cell         { min-width: 80px; padding: 4px 8px; }
   .data-value        { font-size: 11px; }
   #header-btn-band   { gap: 3px; padding: 0 6px; }
   .lcars-btn         { font-size: 9px; padding: 6px 8px; }
 
-  /* Canvas full-bleed */
+  /* Canvas full-bleed (no left border — sidebar gone) */
   #canvas-area {
     border-left: none;
     border-top: 2px solid var(--lc-orange);
-  }
-
-  /* Mobile bottom nav (replaces sidebar filter buttons) */
-  #main-area {
-    flex-direction: column;
-  }
-  #mobile-nav {
-    display: flex;
   }
 
   /* Info panel full-width */
   #info-panel {
     right: 0; left: 0;
     width: 100%;
-    bottom: calc(var(--footer-h) + 52px);
+    bottom: calc(var(--footer-h) + 56px);
     border-radius: 0;
   }
 }
 
-/* Ensure search results position is absolute relative to #app */
+/* Search-bar needs position:relative so #search-results can be absolute inside it */
 #search-bar { position: relative; }

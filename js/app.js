@@ -37,10 +37,11 @@
 
   // ── State ──────────────────────────────────────────────────
   let lat = 52.0, lon = 5.0;   // default: Netherlands
-  let locationKnown = false;
   let renderer;
   let animHandle;
-  let lastComputeTime = 0;
+  let lastComputeTime  = 0;
+  let lastClockSecond  = -1;    // rate-limit time display to 1×/s
+  let searchIndexCache = null;  // invalidated after computePositions
   let orientation = { alpha: null, beta: null, gamma: null };
   let useDeviceOrientation = false;
   let compassAlpha = null; // smoothed heading
@@ -60,11 +61,21 @@
     requestGeolocation();
     startLoop();
 
-    btnAR.addEventListener('click',      switchToAR);
-    btnMap.addEventListener('click',      switchToMap);
-    btnLocate.addEventListener('click',   requestGeolocation);
+    btnAR.addEventListener('click',           switchToAR);
+    btnMap.addEventListener('click',          switchToMap);
+    btnLocate.addEventListener('click',       requestGeolocation);
     btnSearchToggle.addEventListener('click', toggleSearchBar);
     document.getElementById('search-close').addEventListener('click', closeSearchBar);
+
+    // Pause rendering when tab is hidden, resume on return
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) {
+        cancelAnimationFrame(animHandle);
+      } else {
+        lastComputeTime = 0; // force immediate recompute
+        startLoop();
+      }
+    });
 
     // Mode default
     switchToMap();
@@ -90,7 +101,14 @@
       }
       renderer.date = new Date();
       renderer.render();
-      updateTimeDisplay();
+
+      // Clock: update once per second
+      const nowSec = Math.floor(now / 1000);
+      if (nowSec !== lastClockSecond) {
+        lastClockSecond = nowSec;
+        updateTimeDisplay();
+      }
+
       if (renderer.mode === 'ar') {
         arAzEl.textContent  = formatAz(renderer.viewAz);
         arAltEl.textContent = formatAlt(renderer.viewAlt);
@@ -118,6 +136,8 @@
       renderer.planets = getPlanets(lat, lon, date);
       renderer.sunMoon = getSunMoon(lat, lon, date);
     }
+
+    searchIndexCache = null; // invalidate so search rebuilds with fresh positions
   }
 
   // ── Geolocation ────────────────────────────────────────────
@@ -132,10 +152,9 @@
       pos => {
         lat = pos.coords.latitude;
         lon = pos.coords.longitude;
-        locationKnown = true;
-        const locStr = `${lat.toFixed(2)}° ${lat>=0?'N':'S'} / ${Math.abs(lon).toFixed(2)}° ${lon>=0?'E':'W'}`;
+        const locStr = `${Math.abs(lat).toFixed(2)}° ${lat>=0?'N':'S'} · ${Math.abs(lon).toFixed(2)}° ${lon>=0?'E':'W'}`;
         if (locationDisplay) locationDisplay.textContent = locStr;
-        setStatus(`LOCATION ACQUIRED`);
+        setStatus('LOCATION ACQUIRED');
         computePositions(Date.now());
         lastComputeTime = Date.now();
         setTimeout(() => setStatus(''), 3000);
@@ -241,14 +260,10 @@
     }, 2000);
   }
 
-  // ── Search ─────────────────────────────────────────────────
   // ── Search bar visibility ──────────────────────────────────
   function toggleSearchBar() {
-    const open = searchBar.classList.toggle('hidden');
-    if (!open) {
-      // bar just became visible
-      searchInput.focus();
-    }
+    const isNowOpen = searchBar.classList.toggle('hidden') === false;
+    if (isNowOpen) searchInput.focus();
   }
 
   function closeSearchBar() {
@@ -295,6 +310,7 @@
   }
 
   function buildSearchIndex() {
+    if (searchIndexCache) return searchIndexCache;
     const items = [];
     // Stars
     for (const s of renderer.stars) {
@@ -334,6 +350,7 @@
         obj: c,
       });
     }
+    searchIndexCache = items;
     return items;
   }
 
@@ -420,15 +437,13 @@
   // ── Canvas tap / click ─────────────────────────────────────
   function setupCanvasInteraction() {
     let touchStartX, touchStartY, touchStartTime;
-    let dragStartAz, dragStartAlt, dragLastX, dragLastY;
+    let dragLastX, dragLastY;
     let isDragging = false;
 
     canvas.addEventListener('touchstart', e => {
       touchStartX = e.touches[0].clientX;
       touchStartY = e.touches[0].clientY;
       touchStartTime = Date.now();
-      dragStartAz  = renderer.viewAz;
-      dragStartAlt = renderer.viewAlt;
       dragLastX    = touchStartX;
       dragLastY    = touchStartY;
     }, { passive: true });
@@ -559,12 +574,19 @@
     });
   }
 
-  // ── Filter buttons (bottom bar) ────────────────────────────
+  // ── Filter buttons (sidebar + mobile nav) ───────────────────────
   function setupFilterButtons() {
+    // Sidebar buttons (desktop)
     document.getElementById('filter-planets').addEventListener('click', () => showQuickList('planets'));
     document.getElementById('filter-stars').addEventListener('click',   () => showQuickList('stars'));
     document.getElementById('filter-constellations').addEventListener('click', () => showQuickList('constellations'));
     document.getElementById('filter-moon').addEventListener('click',    () => showQuickList('moon'));
+
+    // Mobile nav buttons (share data-filter attribute)
+    document.getElementById('mobile-nav').addEventListener('click', e => {
+      const btn = e.target.closest('[data-filter]');
+      if (btn) showQuickList(btn.dataset.filter);
+    });
   }
 
   function showQuickList(category) {
@@ -622,7 +644,7 @@
   // ── Time display ───────────────────────────────────────────
   function updateTimeDisplay() {
     const now = new Date();
-    if (timeDisplay)    timeDisplay.textContent    = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
+    if (timeDisplay)     timeDisplay.textContent     = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
     if (stardateDisplay) stardateDisplay.textContent = computeStardate(now);
   }
 
