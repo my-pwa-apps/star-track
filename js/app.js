@@ -47,6 +47,10 @@
   let compassAlpha = null; // smoothed azimuth
   let smoothBeta    = null; // smoothed tilt   (altitude)
   let smoothGamma   = null; // smoothed roll   (az correction)
+  // Previous raw sensor values used to compute per-frame angular velocity
+  let prevRawAlpha  = null;
+  let prevRawBeta   = null;
+  let prevRawGamma  = null;
   let wakeLock      = null; // Screen Wake Lock handle
 
   // ── Init ───────────────────────────────────────────────────
@@ -294,25 +298,52 @@
   function applyDeviceOrientation() {
     if (orientation.alpha === null) return;
 
-    const LERP = 0.08; // lower = smoother, less twitchy (was 0.15)
+    // Adaptive LERP — scales with angular velocity so the view stays rock
+    // steady when held still (noise rejected) yet snaps instantly when panning
+    //   LERP_MIN : used when nearly stationary  → tight noise rejection
+    //   LERP_MAX : used at fast deliberate sweeps → full responsiveness
+    //   VEL_FULL : °/frame velocity that saturates to LERP_MAX
+    const LERP_MIN = 0.03;
+    const LERP_MAX = 0.20;
+    const VEL_FULL = 5.0; // degrees per frame
 
-    // ─ Azimuth (alpha) — shortest-arc lerp to avoid 359↔•0 wrap jump ─
     const targetAlpha = orientation.alpha;
+    const targetBeta  = orientation.beta  ?? 45;
+    const targetGamma = orientation.gamma ?? 0;
+
+    // ─ Per-axis instantaneous velocity (degrees since last frame) ─
+    let velA = 0, velB = 0, velG = 0;
+    if (prevRawAlpha !== null) {
+      let da = targetAlpha - prevRawAlpha;
+      if (da >  180) da -= 360;          // shortest arc
+      if (da < -180) da += 360;
+      velA = Math.abs(da);
+    }
+    if (prevRawBeta  !== null) velB = Math.abs(targetBeta  - prevRawBeta);
+    if (prevRawGamma !== null) velG = Math.abs(targetGamma - prevRawGamma);
+    prevRawAlpha = targetAlpha;
+    prevRawBeta  = targetBeta;
+    prevRawGamma = targetGamma;
+
+    // ─ Adaptive lerp factors, one per axis ─
+    const lerpA = LERP_MIN + (LERP_MAX - LERP_MIN) * Math.min(velA / VEL_FULL, 1);
+    const lerpB = LERP_MIN + (LERP_MAX - LERP_MIN) * Math.min(velB / VEL_FULL, 1);
+    const lerpG = LERP_MIN + (LERP_MAX - LERP_MIN) * Math.min(velG / VEL_FULL, 1);
+
+    // ─ Azimuth (alpha) — shortest-arc lerp to avoid 359↔0 wrap jump ─
     if (compassAlpha === null) compassAlpha = targetAlpha;
     let diffA = targetAlpha - compassAlpha;
     if (diffA >  180) diffA -= 360;
     if (diffA < -180) diffA += 360;
-    compassAlpha = (compassAlpha + diffA * LERP + 360) % 360;
+    compassAlpha = (compassAlpha + diffA * lerpA + 360) % 360;
 
-    // ─ Tilt / altitude (beta) — linear lerp ─
-    const targetBeta = orientation.beta ?? 45;
+    // ─ Tilt / altitude (beta) ─
     if (smoothBeta === null) smoothBeta = targetBeta;
-    smoothBeta += (targetBeta - smoothBeta) * LERP;
+    smoothBeta += (targetBeta - smoothBeta) * lerpB;
 
-    // ─ Roll correction (gamma) — linear lerp ─
-    const targetGamma = orientation.gamma ?? 0;
+    // ─ Roll correction (gamma) ─
     if (smoothGamma === null) smoothGamma = targetGamma;
-    smoothGamma += (targetGamma - smoothGamma) * LERP;
+    smoothGamma += (targetGamma - smoothGamma) * lerpG;
 
     // altitude = 90 - beta  (beta=90 → horizon, beta=0 → flat, beta<0 → past zenith)
     const alt = Math.max(-10, Math.min(90, 90 - smoothBeta));
@@ -334,6 +365,9 @@
     compassAlpha = null;
     smoothBeta   = null;
     smoothGamma  = null;
+    prevRawAlpha = null;
+    prevRawBeta  = null;
+    prevRawGamma = null;
     if (arReadout) arReadout.classList.add('hidden');
     setSidebarStatus('MAP MODE ACTIVE');
     setStatus('');
