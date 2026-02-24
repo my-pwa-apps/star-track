@@ -284,7 +284,7 @@ class SkyRenderer {
       for (let az = 0; az < 360; az += 15) {
         ctx.beginPath();
         let first = true;
-        for (let a = -10; a <= 90; a += 2) {
+        for (let a = -90; a <= 90; a += 2) {
           const p = project(a, az);
           if (!p || p.x < -50 || p.x > W+50 || p.y < -50 || p.y > H+50) { first = true; continue; }
           if (first) { ctx.moveTo(p.x, p.y); first = false; }

@@ -318,7 +318,7 @@
     const VEL_FULL = 5.0; // degrees per frame
 
     const targetAlpha = orientation.alpha;
-    const targetBeta  = orientation.beta  ?? 45;
+    const targetBeta  = orientation.beta  ?? 135; // default to looking up at 45°
     const targetGamma = orientation.gamma ?? 0;
 
     // ─ Per-axis instantaneous velocity (degrees since last frame) ─
@@ -355,8 +355,8 @@
     if (smoothGamma === null) smoothGamma = targetGamma;
     smoothGamma += (targetGamma - smoothGamma) * lerpG;
 
-    // altitude = 90 - beta  (beta=90 → horizon, beta=0 → flat, beta<0 → past zenith)
-    const alt = Math.max(-10, Math.min(90, 90 - smoothBeta));
+    // altitude = beta - 90 (beta=90 → horizon, beta=180 → zenith, beta=0 → nadir)
+    const alt = Math.max(-90, Math.min(90, smoothBeta - 90));
 
     // azimuth + small roll correction
     const az  = ((compassAlpha + smoothGamma * 0.5) % 360 + 360) % 360;
