@@ -6,7 +6,9 @@
   <meta name="theme-color" content="#000000" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black" />
+  <meta name="apple-mobile-web-app-title" content="Star Track" />
   <meta name="description" content="Star Track – LCARS Astronomical Navigation System" />
+  <link rel="apple-touch-icon" href="icons/icon.svg" />
   <title>Star Track – LCARS</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -208,6 +210,38 @@
   </div>
 
 </div><!-- /#app -->
+
+<!-- ╔══════════════════════════════════════════════════╗
+     ║  PWA INSTALL BANNER  (LCARS styled)              ║
+     ╚══════════════════════════════════════════════════╝ -->
+<div id="pwa-install-banner" class="pwa-banner hidden" role="complementary" aria-label="Install application">
+  <div class="pwa-banner-elbow" aria-hidden="true"></div>
+  <div class="pwa-banner-content">
+    <span class="pwa-banner-label">NEW APPLICATION AVAILABLE</span>
+    <span class="pwa-banner-text">STAR&nbsp;TRACK CAN BE INSTALLED TO THIS DEVICE FOR OFFLINE USE</span>
+  </div>
+  <div class="pwa-banner-actions">
+    <button id="pwa-install-btn"     class="lcars-btn btn-orange">⬇&nbsp;INSTALL</button>
+    <button id="pwa-install-dismiss" class="lcars-btn btn-red btn-sm">DISMISS</button>
+  </div>
+  <div class="pwa-banner-tail" aria-hidden="true"></div>
+</div>
+
+<!-- ╔══════════════════════════════════════════════════╗
+     ║  PWA UPDATE BANNER  (LCARS styled)               ║
+     ╚══════════════════════════════════════════════════╝ -->
+<div id="pwa-update-banner" class="pwa-banner hidden" role="complementary" aria-label="System update">
+  <div class="pwa-banner-elbow pwa-elbow-teal" aria-hidden="true"></div>
+  <div class="pwa-banner-content">
+    <span class="pwa-banner-label pwa-label-teal">SYSTEM UPDATE AVAILABLE</span>
+    <span class="pwa-banner-text">A NEW VERSION OF STAR&nbsp;TRACK HAS BEEN DOWNLOADED</span>
+  </div>
+  <div class="pwa-banner-actions">
+    <button id="pwa-update-btn"     class="lcars-btn btn-teal">↺&nbsp;RELOAD NOW</button>
+    <button id="pwa-update-dismiss" class="lcars-btn btn-red btn-sm">LATER</button>
+  </div>
+  <div class="pwa-banner-tail pwa-tail-teal" aria-hidden="true"></div>
+</div>
 
 <script src="https://cdn.jsdelivr.net/npm/astronomy-engine@2/astronomy.browser.min.js"></script>
 <script src="js/data/stars.js"></script>

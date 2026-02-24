@@ -742,6 +742,109 @@ html, body {
 ::-webkit-scrollbar-thumb { background: var(--lc-dim); border-radius: 2px; }
 
 /* ══════════════════════════════════════════════════════════
+   PWA BANNERS  (install + update notifications)
+══════════════════════════════════════════════════════════ */
+.pwa-banner {
+  position: fixed;
+  bottom: 4px;
+  left: 50%;
+  translate: -50% 0;
+  z-index: 1500;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: #000;
+  border: 2px solid var(--lc-orange);
+  border-radius: 36px;
+  padding: 10px 20px 10px 0;
+  max-width: 780px;
+  width: calc(100% - 32px);
+  box-shadow: 0 0 32px rgba(255,153,0,.35), 0 4px 24px #000c;
+  animation: banner-slide-in .35s cubic-bezier(.22,.61,.36,1) both;
+}
+.pwa-banner.hidden { display: none !important; }
+
+@keyframes banner-slide-in {
+  from { translate: -50% 120%; opacity: 0; }
+  to   { translate: -50% 0;   opacity: 1; }
+}
+
+/* Elbow shape on the left */
+.pwa-banner-elbow {
+  flex-shrink: 0;
+  width: 80px;
+  height: 100%;
+  min-height: 56px;
+  background: var(--lc-orange);
+  border-radius: 34px 0 0 34px;
+  margin-right: 4px;
+}
+.pwa-elbow-teal {
+  background: var(--lc-teal) !important;
+}
+.pwa-banner:has(.pwa-elbow-teal) {
+  border-color: var(--lc-teal);
+  box-shadow: 0 0 32px rgba(102,204,255,.3), 0 4px 24px #000c;
+}
+
+/* Tail pill on the right */
+.pwa-banner-tail {
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--lc-orange);
+  margin-left: auto;
+}
+.pwa-tail-teal { background: var(--lc-teal) !important; }
+
+/* Text content */
+.pwa-banner-content {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.pwa-banner-label {
+  font-family: var(--font-ui);
+  font-size: .65rem;
+  letter-spacing: .18em;
+  color: var(--lc-orange);
+}
+.pwa-label-teal { color: var(--lc-teal) !important; }
+.pwa-banner-text {
+  font-family: var(--font-ui);
+  font-size: .75rem;
+  letter-spacing: .08em;
+  color: #fff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Action buttons cluster */
+.pwa-banner-actions {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+  margin-left: 12px;
+}
+
+/* ── Responsive: stack on very small screens ─────────────── */
+@media (max-width: 420px) {
+  .pwa-banner {
+    flex-wrap: wrap;
+    border-radius: 20px;
+    padding: 10px 10px 10px 0;
+    bottom: 72px; /* clear mobile-nav */
+  }
+  .pwa-banner-elbow { width: 56px; border-radius: 18px 0 0 18px; min-height: 48px; }
+  .pwa-banner-tail  { display: none; }
+  .pwa-banner-text  { white-space: normal; font-size: .7rem; }
+  .pwa-banner-actions { margin-left: 60px; }
+}
+
+/* ══════════════════════════════════════════════════════════
    MOBILE BOTTOM NAV (hidden on desktop)
 ══════════════════════════════════════════════════════════ */
 #mobile-nav {

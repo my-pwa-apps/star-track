@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Star Track">
+  <!-- Full bleed black background (maskable — entire canvas is safe) -->
+  <rect width="512" height="512" fill="#000000"/>
+
+  <!-- Outer ring to fill maskable area -->
+  <circle cx="256" cy="256" r="220" fill="#0a0a0a"/>
+
+  <!-- LCARS orange arc segments top -->
+  <path d="M 96,256 A 160,160 0 0,1 256,96" fill="none" stroke="#FF9900" stroke-width="32" stroke-linecap="round"/>
+  <path d="M 256,96 A 160,160 0 0,1 416,256" fill="none" stroke="#9966FF" stroke-width="32" stroke-linecap="round"/>
+  <path d="M 416,256 A 160,160 0 0,1 256,416" fill="none" stroke="#6688FF" stroke-width="32" stroke-linecap="round"/>
+  <path d="M 256,416 A 160,160 0 0,1 96,256" fill="none" stroke="#FF9900" stroke-width="32" stroke-linecap="round"/>
+
+  <!-- Inner reticle -->
+  <circle cx="256" cy="256" r="88" fill="none" stroke="#66CCFF" stroke-width="2"/>
+
+  <!-- Crosshair -->
+  <line x1="256" y1="168" x2="256" y2="208" stroke="#66CCFF" stroke-width="4" stroke-linecap="round"/>
+  <line x1="256" y1="304" x2="256" y2="344" stroke="#66CCFF" stroke-width="4" stroke-linecap="round"/>
+  <line x1="168" y1="256" x2="208" y2="256" stroke="#66CCFF" stroke-width="4" stroke-linecap="round"/>
+  <line x1="304" y1="256" x2="344" y2="256" stroke="#66CCFF" stroke-width="4" stroke-linecap="round"/>
+
+  <!-- Central star -->
+  <polygon points="256,212 266,244 300,244 274,262 284,294 256,276 228,294 238,262 212,244 246,244"
+           fill="#FF9900"/>
+
+  <!-- Centre dot -->
+  <circle cx="256" cy="256" r="5" fill="#FFCC00"/>
+</svg>

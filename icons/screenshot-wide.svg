@@ -1,0 +1,49 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720">
+  <!-- Background -->
+  <rect width="1280" height="720" fill="#000000"/>
+  <!-- LCARS header bar -->
+  <rect x="0" y="0" width="1280" height="72" fill="#000000"/>
+  <!-- Orange elbow -->
+  <rect x="0" y="0" width="80" height="72" fill="#FF9900" rx="36" ry="36"/>
+  <rect x="0" y="36" width="80" height="36" fill="#FF9900"/>
+  <rect x="80" y="48" width="300" height="24" fill="#FF9900"/>
+  <!-- Header label -->
+  <text x="420" y="40" font-family="Arial,sans-serif" font-size="28" font-weight="bold" fill="#FF9900" letter-spacing="4">STAR TRACK</text>
+  <text x="420" y="62" font-family="Arial,sans-serif" font-size="12" fill="#9966FF" letter-spacing="2">STELLAR CARTOGRAPHY SYSTEM</text>
+  <!-- Sidebar -->
+  <rect x="0" y="72" width="200" height="648" fill="#111111"/>
+  <rect x="0" y="72" width="8" height="648" fill="#9966FF"/>
+  <!-- Sidebar buttons -->
+  <rect x="12" y="90" width="176" height="40" fill="#FF9900" rx="20" ry="20"/>
+  <text x="100" y="116" text-anchor="middle" font-family="Arial,sans-serif" font-size="14" fill="#000" letter-spacing="2">PLANETS</text>
+  <rect x="12" y="140" width="176" height="40" fill="#9966FF" rx="20" ry="20"/>
+  <text x="100" y="166" text-anchor="middle" font-family="Arial,sans-serif" font-size="14" fill="#000" letter-spacing="2">STARS</text>
+  <rect x="12" y="190" width="176" height="40" fill="#6688FF" rx="20" ry="20"/>
+  <text x="100" y="216" text-anchor="middle" font-family="Arial,sans-serif" font-size="14" fill="#000" letter-spacing="2">CONSTELLATIONS</text>
+  <!-- Sky canvas area -->
+  <rect x="200" y="72" width="1080" height="648" fill="#020510"/>
+  <!-- Stars (scattered dots) -->
+  <circle cx="400" cy="250" r="2" fill="white" opacity="0.9"/>
+  <circle cx="550" cy="180" r="3" fill="white" opacity="0.8"/>
+  <circle cx="700" cy="300" r="1.5" fill="#66CCFF" opacity="0.9"/>
+  <circle cx="820" cy="200" r="2.5" fill="white" opacity="0.7"/>
+  <circle cx="950" cy="280" r="2" fill="white" opacity="0.8"/>
+  <circle cx="1050" cy="150" r="3" fill="#FFCC00" opacity="0.9"/>
+  <circle cx="620" cy="400" r="1.5" fill="white" opacity="0.6"/>
+  <circle cx="780" cy="450" r="2" fill="white" opacity="0.7"/>
+  <circle cx="350" cy="500" r="1.5" fill="white" opacity="0.5"/>
+  <circle cx="480" cy="350" r="2" fill="white" opacity="0.8"/>
+  <!-- Horizon arc -->
+  <ellipse cx="740" cy="600" rx="450" ry="100" fill="none" stroke="#66CCFF" stroke-width="1.5" stroke-dasharray="8,4" opacity="0.5"/>
+  <!-- Compass circle -->
+  <circle cx="740" cy="396" r="220" fill="none" stroke="#6688FF" stroke-width="1" stroke-dasharray="4,8" opacity="0.4"/>
+  <!-- Reticle at center -->
+  <circle cx="740" cy="396" r="30" fill="none" stroke="#FF9900" stroke-width="2" opacity="0.8"/>
+  <line x1="710" y1="396" x2="770" y2="396" stroke="#FF9900" stroke-width="1.5" opacity="0.8"/>
+  <line x1="740" y1="366" x2="740" y2="426" stroke="#FF9900" stroke-width="1.5" opacity="0.8"/>
+  <!-- Footer -->
+  <rect x="200" y="695" width="1080" height="25" fill="#000000"/>
+  <rect x="200" y="695" width="500" height="6" fill="#FF9900"/>
+  <rect x="710" y="695" width="200" height="6" fill="#9966FF"/>
+  <rect x="920" y="695" width="360" height="6" fill="#6688FF"/>
+</svg>

@@ -1,0 +1,50 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 390 844">
+  <!-- Background -->
+  <rect width="390" height="844" fill="#000000"/>
+  <!-- LCARS header -->
+  <rect x="0" y="0" width="390" height="60" fill="#000000"/>
+  <!-- Orange elbow -->
+  <rect x="0" y="0" width="56" height="60" fill="#FF9900" rx="28" ry="28"/>
+  <rect x="0" y="30" width="56" height="30" fill="#FF9900"/>
+  <rect x="56" y="40" width="160" height="20" fill="#FF9900"/>
+  <!-- Header label -->
+  <text x="240" y="28" font-family="Arial,sans-serif" font-size="18" font-weight="bold" fill="#FF9900" letter-spacing="3">STAR TRACK</text>
+  <text x="240" y="46" font-family="Arial,sans-serif" font-size="9" fill="#9966FF" letter-spacing="2">STELLAR CARTOGRAPHY</text>
+  <!-- Sky canvas area -->
+  <rect x="0" y="60" width="390" height="680" fill="#020510"/>
+  <!-- Stars -->
+  <circle cx="100" cy="150" r="1.5" fill="white" opacity="0.9"/>
+  <circle cx="200" cy="100" r="2" fill="white" opacity="0.8"/>
+  <circle cx="280" cy="180" r="1.5" fill="#66CCFF" opacity="0.9"/>
+  <circle cx="330" cy="130" r="2" fill="white" opacity="0.7"/>
+  <circle cx="150" cy="260" r="1.5" fill="white" opacity="0.8"/>
+  <circle cx="320" cy="300" r="2" fill="#FFCC00" opacity="0.9"/>
+  <circle cx="80" cy="320" r="1.5" fill="white" opacity="0.6"/>
+  <circle cx="240" cy="380" r="1.5" fill="white" opacity="0.7"/>
+  <circle cx="110" cy="440" r="1.5" fill="white" opacity="0.5"/>
+  <!-- Horizon arc -->
+  <ellipse cx="195" cy="620" rx="170" ry="60" fill="none" stroke="#66CCFF" stroke-width="1.5" stroke-dasharray="6,3" opacity="0.5"/>
+  <!-- Compass circle -->
+  <circle cx="195" cy="360" r="140" fill="none" stroke="#6688FF" stroke-width="1" stroke-dasharray="3,6" opacity="0.4"/>
+  <!-- Reticle -->
+  <circle cx="195" cy="360" r="24" fill="none" stroke="#FF9900" stroke-width="2" opacity="0.8"/>
+  <line x1="171" y1="360" x2="219" y2="360" stroke="#FF9900" stroke-width="1.5" opacity="0.8"/>
+  <line x1="195" y1="336" x2="195" y2="384" stroke="#FF9900" stroke-width="1.5" opacity="0.8"/>
+  <!-- Mobile nav bar -->
+  <rect x="0" y="740" width="390" height="60" fill="#111111"/>
+  <rect x="0" y="740" width="390" height="4" fill="#9966FF"/>
+  <!-- Nav buttons -->
+  <rect x="10" y="750" width="80" height="38" fill="#FF9900" rx="19" ry="19"/>
+  <text x="50" y="774" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#000" letter-spacing="1">PLANETS</text>
+  <rect x="100" y="750" width="80" height="38" fill="#9966FF" rx="19" ry="19"/>
+  <text x="140" y="774" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#000" letter-spacing="1">STARS</text>
+  <rect x="190" y="750" width="80" height="38" fill="#6688FF" rx="19" ry="19"/>
+  <text x="230" y="774" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#000" letter-spacing="1">CONSTEL.</text>
+  <rect x="300" y="750" width="80" height="38" fill="#66CCFF" rx="19" ry="19"/>
+  <text x="340" y="774" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" fill="#000" letter-spacing="1">MOON</text>
+  <!-- Footer bar -->
+  <rect x="0" y="800" width="390" height="44" fill="#000000"/>
+  <rect x="0" y="800" width="200" height="5" fill="#FF9900"/>
+  <rect x="210" y="800" width="100" height="5" fill="#9966FF"/>
+  <rect x="320" y="800" width="70" height="5" fill="#6688FF"/>
+</svg>

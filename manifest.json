@@ -1,18 +1,45 @@
 {
+  "id": "/",
   "name": "Star Track",
   "short_name": "StarTrack",
-  "description": "Real-time sky map – find planets, stars and constellations",
-  "start_url": ".",
+  "description": "Real-time sky map – find planets, stars and constellations with AR overlays",
+  "start_url": "./",
+  "scope": "/",
   "display": "fullscreen",
+  "display_override": ["window-controls-overlay", "fullscreen", "standalone"],
   "orientation": "any",
-  "theme_color": "#050d18",
-  "background_color": "#050d18",
+  "theme_color": "#000000",
+  "background_color": "#000000",
+  "prefer_related_applications": false,
+  "categories": ["navigation", "utilities", "education"],
   "icons": [
     {
-      "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔭</text></svg>",
+      "src": "icons/icon.svg",
       "sizes": "any",
       "type": "image/svg+xml",
-      "purpose": "any maskable"
+      "purpose": "any"
+    },
+    {
+      "src": "icons/icon-maskable.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ],
+  "screenshots": [
+    {
+      "src": "icons/screenshot-wide.svg",
+      "sizes": "1280x720",
+      "type": "image/svg+xml",
+      "form_factor": "wide",
+      "label": "Star Track sky map on desktop"
+    },
+    {
+      "src": "icons/screenshot-narrow.svg",
+      "sizes": "390x844",
+      "type": "image/svg+xml",
+      "form_factor": "narrow",
+      "label": "Star Track sky map on mobile"
     }
   ]
 }

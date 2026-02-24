@@ -85,6 +85,9 @@
 
     // Mode default
     switchToMap();
+
+    // PWA: service worker + install/update prompts
+    setupPWA();
   }
 
   // ── Screen Wake Lock ──────────────────────────────────────────
@@ -96,6 +99,80 @@
     } catch (err) {
       // Non-critical — fails silently (e.g. low battery lockout)
     }
+  }
+
+  // ── PWA: Service Worker + Install / Update prompts ────────────
+  function setupPWA() {
+    if (!('serviceWorker' in navigator)) return;
+
+    let deferredInstallPrompt = null;
+
+    const installBanner  = document.getElementById('pwa-install-banner');
+    const updateBanner   = document.getElementById('pwa-update-banner');
+    const installBtn     = document.getElementById('pwa-install-btn');
+    const installDismiss = document.getElementById('pwa-install-dismiss');
+    const updateBtn      = document.getElementById('pwa-update-btn');
+    const updateDismiss  = document.getElementById('pwa-update-dismiss');
+
+    // ── Register the service worker ──────────────────────────
+    navigator.serviceWorker.register('/sw.js').then(reg => {
+
+      // A new SW is waiting to take over → show update banner
+      if (reg.waiting) showUpdateBanner(reg.waiting);
+
+      reg.addEventListener('updatefound', () => {
+        const newSW = reg.installing;
+        newSW.addEventListener('statechange', () => {
+          if (newSW.state === 'installed' && navigator.serviceWorker.controller) {
+            showUpdateBanner(newSW);
+          }
+        });
+      });
+    }).catch(() => { /* SW registration failed — non-critical */ });
+
+    // Reload once the new SW has taken control
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      window.location.reload();
+    });
+
+    // ── Install prompt ────────────────────────────────────────
+    const DISMISS_KEY = 'pwa-install-dismissed';
+
+    window.addEventListener('beforeinstallprompt', e => {
+      e.preventDefault();
+      deferredInstallPrompt = e;
+      if (!localStorage.getItem(DISMISS_KEY)) {
+        showBanner(installBanner);
+      }
+    });
+
+    installBtn.addEventListener('click', async () => {
+      hideBanner(installBanner);
+      if (!deferredInstallPrompt) return;
+      deferredInstallPrompt.prompt();
+      const { outcome } = await deferredInstallPrompt.userChoice;
+      if (outcome === 'accepted') deferredInstallPrompt = null;
+    });
+
+    installDismiss.addEventListener('click', () => {
+      hideBanner(installBanner);
+      localStorage.setItem(DISMISS_KEY, '1');
+    });
+
+    // ── Update prompt ─────────────────────────────────────────
+    function showUpdateBanner(sw) {
+      showBanner(updateBanner);
+      updateBtn.addEventListener('click', () => {
+        hideBanner(updateBanner);
+        sw.postMessage({ type: 'SKIP_WAITING' });
+      }, { once: true });
+    }
+
+    updateDismiss.addEventListener('click', () => hideBanner(updateBanner));
+
+    // ── Helpers ───────────────────────────────────────────────
+    function showBanner(el) { el.classList.remove('hidden'); }
+    function hideBanner(el) { el.classList.add('hidden'); }
   }
 
   // ── Resize observer ───────────────────────────────────────
