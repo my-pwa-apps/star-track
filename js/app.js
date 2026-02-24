@@ -381,14 +381,11 @@
     // Mark that orientation data is available (used as a null-guard elsewhere)
     orientation.alpha = e.alpha;
 
-    // Screen-orientation correction: on landscape devices (or any screen rotation)
-    // the browser's alpha reference frame is still body-relative, but the screen
-    // is rotated relative to the body.  Subtract the current screen angle so
-    // the camera axis is always relative to the screen, not the device body.
-    const screenAngle = window.screen?.orientation?.angle ?? window.orientation ?? 0;
-
     // Convert to world-frame ENU look-vector immediately — no Euler buffering.
-    const vec = eulerToLookVector(e.alpha - screenAngle, e.beta, e.gamma);
+    // alpha/beta/gamma are measured in the world frame by the sensor; no screen-
+    // orientation correction is needed here (screen rotation does not affect where
+    // the physical camera is pointing in the real world).
+    const vec = eulerToLookVector(e.alpha, e.beta, e.gamma);
     sensorBuf.push(vec);
     if (sensorBuf.length > SENSOR_BUF_SIZE) sensorBuf.shift();
   }
