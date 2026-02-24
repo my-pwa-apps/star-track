@@ -54,11 +54,12 @@
   let prevRawGamma  = null;
   let wakeLock      = null; // Screen Wake Lock handle
 
-  // ── Sensor ring buffer (multi-sample averaging) ────────────
-  // Sensors fire at ~60 Hz; accumulate readings between animation frames
-  // and average them to reject high-frequency noise before LERP.
+  // ── Sensor ring buffer (vector-space averaging) ──────────
+  // Convert each sensor event to a 3D look-vector immediately (in onOrientation).
+  // Buffering and averaging in vector space — NOT Euler angle space — avoids
+  // all singularity amplification entirely.
   const SENSOR_BUF_SIZE = 12;
-  const sensorBuf = { alpha: [], beta: [], gamma: [] };
+  const sensorBuf = [];   // ring buffer of {east, north, up} unit look-vectors
   let stationaryFrames = 0;
   let stationaryLock   = false;
 
@@ -375,23 +376,21 @@
       orientationSource = 'relative';
     }
 
-    orientation.alpha = e.alpha ?? orientation.alpha;
-    orientation.beta  = e.beta  ?? orientation.beta;
-    orientation.gamma = e.gamma ?? orientation.gamma;
+    if (e.alpha == null || e.beta == null || e.gamma == null) return;
 
-    // Push into ring buffer for multi-sample averaging
-    if (e.alpha != null) {
-      sensorBuf.alpha.push(e.alpha);
-      if (sensorBuf.alpha.length > SENSOR_BUF_SIZE) sensorBuf.alpha.shift();
-    }
-    if (e.beta != null) {
-      sensorBuf.beta.push(e.beta);
-      if (sensorBuf.beta.length > SENSOR_BUF_SIZE) sensorBuf.beta.shift();
-    }
-    if (e.gamma != null) {
-      sensorBuf.gamma.push(e.gamma);
-      if (sensorBuf.gamma.length > SENSOR_BUF_SIZE) sensorBuf.gamma.shift();
-    }
+    // Mark that orientation data is available (used as a null-guard elsewhere)
+    orientation.alpha = e.alpha;
+
+    // Screen-orientation correction: on landscape devices (or any screen rotation)
+    // the browser's alpha reference frame is still body-relative, but the screen
+    // is rotated relative to the body.  Subtract the current screen angle so
+    // the camera axis is always relative to the screen, not the device body.
+    const screenAngle = window.screen?.orientation?.angle ?? window.orientation ?? 0;
+
+    // Convert to world-frame ENU look-vector immediately — no Euler buffering.
+    const vec = eulerToLookVector(e.alpha - screenAngle, e.beta, e.gamma);
+    sensorBuf.push(vec);
+    if (sensorBuf.length > SENSOR_BUF_SIZE) sensorBuf.shift();
   }
 
   // Helper: W3C ZXY Euler → ENU unit look-vector.
@@ -422,37 +421,16 @@
   }
 
   function applyDeviceOrientation() {
-    if (orientation.alpha === null) return;
+    if (orientation.alpha === null || sensorBuf.length === 0) return;
 
-    // ── Multi-sample average ──────────────────────────────────────────────
-    // Sensors fire at ~60 Hz; accumulate between frames and average to reject
-    // high-frequency noise.  Average in VECTOR space (not angle space) to
-    // avoid wrap-around artifacts and singularity amplification.
-    function avgCircular(arr) {
-      if (arr.length === 0) return null;
-      let sx = 0, sy = 0;
-      for (const v of arr) { sx += Math.cos(v * DEG); sy += Math.sin(v * DEG); }
-      return ((Math.atan2(sy, sx) * RAD) + 360) % 360;
-    }
-    function avgLinear(arr) {
-      if (arr.length === 0) return null;
-      let s = 0; for (const v of arr) s += v; return s / arr.length;
-    }
+    // ── Average buffered look-vectors component-wise, then renormalise ────
+    // Conversion from Euler angles happened in onOrientation; no Euler math here.
+    let ex = 0, ny = 0, uz = 0;
+    for (const v of sensorBuf) { ex += v.east; ny += v.north; uz += v.up; }
+    sensorBuf.length = 0; // drain – next frame starts fresh
 
-    const targetAlpha = sensorBuf.alpha.length > 0 ? avgCircular(sensorBuf.alpha) : orientation.alpha;
-    const targetBeta  = sensorBuf.beta.length  > 0 ? avgLinear(sensorBuf.beta)    : (orientation.beta  ?? 135);
-    const targetGamma = sensorBuf.gamma.length > 0 ? avgLinear(sensorBuf.gamma)   : (orientation.gamma ?? 0);
-
-    sensorBuf.alpha.length = 0;
-    sensorBuf.beta.length  = 0;
-    sensorBuf.gamma.length = 0;
-
-    // ── Convert raw Euler angles → 3D look-vector ─────────────────────────
-    // All subsequent filtering is done on the unit vector, which has no
-    // singularities or wrap-around problems.  Euler smoothing had the flaw
-    // that near the horizon (beta ≈ 90°, up ≈ 0) tiny gamma noise produced
-    // large azimuth jumps even after smoothing.
-    const rawVec = eulerToLookVector(targetAlpha, targetBeta, targetGamma);
+    const rawLen = Math.sqrt(ex*ex + ny*ny + uz*uz) || 1;
+    const rawVec = { east: ex / rawLen, north: ny / rawLen, up: uz / rawLen };
 
     // ── Angular velocity (in degrees) for motion detection ───────────────
     // Measured as the angle between successive look-vectors (= acos(dot)).
@@ -537,9 +515,7 @@
     stationaryFrames = 0;
     stationaryLock   = false;
     orientationSource = null;
-    sensorBuf.alpha.length = 0;
-    sensorBuf.beta.length  = 0;
-    sensorBuf.gamma.length = 0;
+    sensorBuf.length = 0;
     if (arReadout) arReadout.classList.add('hidden');
     setSidebarStatus('MAP MODE ACTIVE');
     setStatus('');
