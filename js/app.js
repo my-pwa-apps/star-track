@@ -6,25 +6,33 @@
   'use strict';
 
   // ── DOM references ─────────────────────────────────────────
-  const canvas        = document.getElementById('sky-canvas');
-  const statusEl      = document.getElementById('status-bar');
-  const searchInput   = document.getElementById('search-input');
-  const searchResults = document.getElementById('search-results');
-  const infoPanel     = document.getElementById('info-panel');
-  const infoPanelBody = document.getElementById('info-panel-body');
-  const btnAR         = document.getElementById('btn-ar');
-  const btnMap        = document.getElementById('btn-map');
-  const btnSettings   = document.getElementById('btn-settings');
-  const btnLocate     = document.getElementById('btn-locate');
-  const settingsPanel = document.getElementById('settings-panel');
-  const timeDisplay   = document.getElementById('time-display');
+  const canvas           = document.getElementById('sky-canvas');
+  const statusEl         = document.getElementById('status-bar');
+  const searchInput      = document.getElementById('search-input');
+  const searchResults    = document.getElementById('search-results');
+  const searchBar        = document.getElementById('search-bar');
+  const infoPanel        = document.getElementById('info-panel');
+  const infoPanelBody    = document.getElementById('info-panel-body');
+  const ipObjectName     = document.getElementById('ip-object-name');
+  const btnAR            = document.getElementById('btn-ar');
+  const btnMap           = document.getElementById('btn-map');
+  const btnLocate        = document.getElementById('btn-locate');
+  const btnSearchToggle  = document.getElementById('btn-search-toggle');
+  const timeDisplay      = document.getElementById('time-display');
+  const stardateDisplay  = document.getElementById('stardate-display');
+  const locationDisplay  = document.getElementById('location-display');
+  const sidebarStatus    = document.getElementById('sidebar-status-text');
+  const arReadout        = document.getElementById('ar-readout');
+  const arAzEl           = document.getElementById('ar-az');
+  const arAltEl          = document.getElementById('ar-alt');
+  const arModeLabel      = document.getElementById('ar-mode-label');
 
-  // Checkboxes / sliders
-  const chkLines   = document.getElementById('chk-lines');
-  const chkLabels  = document.getElementById('chk-labels');
-  const chkNames   = document.getElementById('chk-names');
-  const chkGrid    = document.getElementById('chk-grid');
-  const sliderMag  = document.getElementById('slider-mag');
+  // Checkboxes / sliders (in LCARS sidebar)
+  const chkLines     = document.getElementById('chk-lines');
+  const chkLabels    = document.getElementById('chk-labels');
+  const chkNames     = document.getElementById('chk-names');
+  const chkGrid      = document.getElementById('chk-grid');
+  const sliderMag    = document.getElementById('slider-mag');
   const sliderMagVal = document.getElementById('slider-mag-val');
 
   // ── State ──────────────────────────────────────────────────
@@ -52,10 +60,11 @@
     requestGeolocation();
     startLoop();
 
-    btnAR.addEventListener('click',       switchToAR);
+    btnAR.addEventListener('click',      switchToAR);
     btnMap.addEventListener('click',      switchToMap);
-    btnSettings.addEventListener('click', toggleSettings);
     btnLocate.addEventListener('click',   requestGeolocation);
+    btnSearchToggle.addEventListener('click', toggleSearchBar);
+    document.getElementById('search-close').addEventListener('click', closeSearchBar);
 
     // Mode default
     switchToMap();
@@ -82,6 +91,11 @@
       renderer.date = new Date();
       renderer.render();
       updateTimeDisplay();
+      if (renderer.mode === 'ar') {
+        arAzEl.textContent  = formatAz(renderer.viewAz);
+        arAltEl.textContent = formatAlt(renderer.viewAlt);
+        arModeLabel.textContent = useDeviceOrientation ? 'SENSOR' : 'MANUAL';
+      }
     }
     animHandle = requestAnimationFrame(frame);
   }
@@ -119,7 +133,9 @@
         lat = pos.coords.latitude;
         lon = pos.coords.longitude;
         locationKnown = true;
-        setStatus(`Location: ${lat.toFixed(2)}°, ${lon.toFixed(2)}°`);
+        const locStr = `${lat.toFixed(2)}° ${lat>=0?'N':'S'} / ${Math.abs(lon).toFixed(2)}° ${lon>=0?'E':'W'}`;
+        if (locationDisplay) locationDisplay.textContent = locStr;
+        setStatus(`LOCATION ACQUIRED`);
         computePositions(Date.now());
         lastComputeTime = Date.now();
         setTimeout(() => setStatus(''), 3000);
@@ -198,6 +214,8 @@
     btnMap.classList.add('active');
     btnAR.classList.remove('active');
     useDeviceOrientation = false;
+    if (arReadout) arReadout.classList.add('hidden');
+    setSidebarStatus('MAP MODE ACTIVE');
     setStatus('');
   }
 
@@ -205,26 +223,45 @@
     renderer.mode = 'ar';
     btnAR.classList.add('active');
     btnMap.classList.remove('active');
+    if (arReadout) arReadout.classList.remove('hidden');
 
     // Try to activate device orientation
     useDeviceOrientation = true;
     requestDeviceOrientation();
-    setStatus('Point your device at the sky ↑');
+    setSidebarStatus('AR MODE ACTIVE');
+    setStatus('POINT DEVICE AT SKY ↑');
     setTimeout(() => {
       if (orientation.alpha === null) {
-        setStatus('Sensors unavailable – drag to look around');
+        setStatus('SENSORS UNAVAILABLE – DRAG TO NAVIGATE');
+        setSidebarStatus('NO SENSOR DATA');
       } else {
         setStatus('');
+        setSidebarStatus('SENSOR LOCK');
       }
     }, 2000);
   }
 
   // ── Search ─────────────────────────────────────────────────
+  // ── Search bar visibility ──────────────────────────────────
+  function toggleSearchBar() {
+    const open = searchBar.classList.toggle('hidden');
+    if (!open) {
+      // bar just became visible
+      searchInput.focus();
+    }
+  }
+
+  function closeSearchBar() {
+    searchBar.classList.add('hidden');
+    searchResults.classList.add('hidden');
+    searchInput.value = '';
+  }
+
   function setupSearch() {
     searchInput.addEventListener('input', onSearchInput);
     searchInput.addEventListener('focus', onSearchInput);
     document.addEventListener('click', e => {
-      if (!searchResults.contains(e.target) && e.target !== searchInput) {
+      if (!searchBar.contains(e.target) && e.target !== btnSearchToggle) {
         searchResults.classList.add('hidden');
       }
     });
@@ -376,6 +413,7 @@
 
     // Show info panel
     infoPanelBody.innerHTML = `<h3>${title}</h3>${details}`;
+    if (ipObjectName) ipObjectName.textContent = title;
     infoPanel.classList.remove('hidden');
   }
 
@@ -479,7 +517,15 @@
     }
   }
 
-  // ── Settings panel ─────────────────────────────────────────
+  // ── Sync LCARS toggle visuals with checkbox state ──────────
+  function syncToggle(checkbox) {
+    // The .t-track element is the next sibling <span> after the checkbox
+    const track = checkbox.nextElementSibling;
+    if (!track) return;
+    track.classList.toggle('on', checkbox.checked);
+  }
+
+  // ── Settings (sidebar) ─────────────────────────────────────
   function setupSettings() {
     chkLines.checked   = renderer.showConstellationLines;
     chkLabels.checked  = renderer.showConstellationLabels;
@@ -488,25 +534,29 @@
     sliderMag.value    = renderer.limitMag;
     sliderMagVal.textContent = renderer.limitMag.toFixed(1);
 
-    chkLines.addEventListener('change',  () => renderer.showConstellationLines  = chkLines.checked);
-    chkLabels.addEventListener('change', () => renderer.showConstellationLabels = chkLabels.checked);
-    chkNames.addEventListener('change',  () => renderer.showStarNames  = chkNames.checked);
-    chkGrid.addEventListener('change',   () => renderer.showGrid = chkGrid.checked);
+    // Initial visual sync for LCARS toggles
+    [chkLines, chkLabels, chkNames, chkGrid].forEach(syncToggle);
+
+    chkLines.addEventListener('change', () => {
+      renderer.showConstellationLines  = chkLines.checked;
+      syncToggle(chkLines);
+    });
+    chkLabels.addEventListener('change', () => {
+      renderer.showConstellationLabels = chkLabels.checked;
+      syncToggle(chkLabels);
+    });
+    chkNames.addEventListener('change', () => {
+      renderer.showStarNames = chkNames.checked;
+      syncToggle(chkNames);
+    });
+    chkGrid.addEventListener('change', () => {
+      renderer.showGrid = chkGrid.checked;
+      syncToggle(chkGrid);
+    });
     sliderMag.addEventListener('input', () => {
       renderer.limitMag = parseFloat(sliderMag.value);
       sliderMagVal.textContent = renderer.limitMag.toFixed(1);
     });
-
-    settingsPanel.addEventListener('click', e => e.stopPropagation());
-  }
-
-  function toggleSettings() {
-    settingsPanel.classList.toggle('hidden');
-    document.addEventListener('click', hideSettings, { once: true });
-  }
-
-  function hideSettings() {
-    settingsPanel.classList.add('hidden');
   }
 
   // ── Filter buttons (bottom bar) ────────────────────────────
@@ -553,20 +603,37 @@
         searchResults.classList.add('hidden');
       });
     });
+    // Open search bar so results are visible
+    searchBar.classList.remove('hidden');
     searchResults.classList.remove('hidden');
     searchInput.focus();
+  }
+
+  // ── Stardate (Metric/TNG style: YYYY.fraction) ────────────
+  function computeStardate(d) {
+    const start = new Date(d.getFullYear(), 0, 0);
+    const diff  = d - start;
+    const oneDay = 86400000;
+    const doy  = Math.floor(diff / oneDay);
+    const frac = (doy / 365.25 * 1000).toFixed(0).padStart(3, '0');
+    return `${d.getFullYear()}.${frac}`;
   }
 
   // ── Time display ───────────────────────────────────────────
   function updateTimeDisplay() {
     const now = new Date();
-    timeDisplay.textContent = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    if (timeDisplay)    timeDisplay.textContent    = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
+    if (stardateDisplay) stardateDisplay.textContent = computeStardate(now);
   }
 
   // ── Status bar ─────────────────────────────────────────────
   function setStatus(msg) {
     statusEl.textContent = msg;
     statusEl.classList.toggle('hidden', !msg);
+  }
+
+  function setSidebarStatus(msg) {
+    if (sidebarStatus) sidebarStatus.textContent = msg;
   }
 
   // ── Start ──────────────────────────────────────────────────

@@ -3,123 +3,204 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-  <meta name="theme-color" content="#050d18" />
+  <meta name="theme-color" content="#000000" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-  <meta name="description" content="Star Track – Real-time sky map with AR pointer mode" />
-  <title>Star Track 🔭</title>
+  <meta name="apple-mobile-web-app-status-bar-style" content="black" />
+  <meta name="description" content="Star Track – LCARS Astronomical Navigation System" />
+  <title>Star Track – LCARS</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Antonio:wght@400;700&family=Share+Tech+Mono&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="css/style.css" />
   <link rel="manifest" href="manifest.json" />
 </head>
 <body>
 <div id="app">
 
-  <!-- ── Top toolbar ──────────────────────────────────────── -->
-  <header id="toolbar">
-    <div id="app-title">
-      <span class="logo">🔭</span>
-      <span class="title-text">Star Track</span>
+  <!-- ═══════════════════════════════════════════════════
+       LCARS HEADER — elbow + title + data + buttons
+  ═══════════════════════════════════════════════════ -->
+  <header id="lcars-header">
+
+    <!-- Elbow: orange rounded corner piece (top-left) -->
+    <div id="lcars-elbow" aria-hidden="true">
+      <div class="elbow-h"></div>
+      <div class="elbow-v"></div>
     </div>
 
-    <div id="search-wrapper">
-      <input id="search-input" type="search" placeholder="Search stars, planets…" autocomplete="off" />
-      <div id="search-results" class="hidden"></div>
+    <!-- App title block -->
+    <div id="header-title-band">
+      <span id="app-subtitle">NAVIGATIONAL&nbsp;ARRAY</span>
+      <span id="app-title">STAR&nbsp;TRACK</span>
     </div>
 
-    <span id="time-display">00:00:00</span>
+    <!-- Live data readouts -->
+    <div id="header-data-band">
+      <div class="data-cell">
+        <span class="data-label">STARDATE</span>
+        <span id="stardate-display" class="data-value mono">——</span>
+      </div>
+      <div class="data-cell">
+        <span class="data-label">LOCAL&nbsp;TIME</span>
+        <span id="time-display" class="data-value mono">00:00:00</span>
+      </div>
+      <div class="data-cell">
+        <span class="data-label">LOCATION</span>
+        <span id="location-display" class="data-value mono">ACQUIRING…</span>
+      </div>
+    </div>
 
-    <button id="btn-map" class="icon-btn" title="Sky Map">
-      <span>🗺</span><span class="btn-label">Map</span>
-    </button>
-    <button id="btn-ar" class="icon-btn" title="AR Look Mode">
-      <span>📡</span><span class="btn-label">AR</span>
-    </button>
-    <button id="btn-locate" class="icon-btn" title="Get location">📍</button>
-    <button id="btn-settings" class="icon-btn" title="Settings">⚙️</button>
+    <!-- Action buttons -->
+    <div id="header-btn-band">
+      <button id="btn-map"           class="lcars-btn btn-orange"  title="Sky Map">MAP</button>
+      <button id="btn-ar"            class="lcars-btn btn-purple"  title="AR Mode">AR&nbsp;VIEW</button>
+      <button id="btn-locate"        class="lcars-btn btn-blue"    title="Geolocate">◉&nbsp;LOCATE</button>
+      <button id="btn-search-toggle" class="lcars-btn btn-yellow"  title="Search">⌕&nbsp;SEARCH</button>
+      <button id="btn-settings"      class="lcars-btn btn-peach"   title="Config" style="display:none">⚙</button>
+    </div>
+
   </header>
 
-  <!-- ── Settings panel (flyout) ──────────────────────────── -->
-  <div id="settings-panel" class="hidden">
-    <h4>⚙ Settings</h4>
-
-    <div class="setting-row">
-      <label for="chk-lines">Constellation lines</label>
-      <label class="toggle-switch">
-        <input type="checkbox" id="chk-lines" checked />
-        <span class="slider"></span>
-      </label>
+  <!-- ═══════════════════════════════════════════════════
+       SEARCH BAR — slides open below header
+  ═══════════════════════════════════════════════════ -->
+  <div id="search-bar" class="hidden">
+    <div id="search-bar-inner">
+      <span class="search-caret" aria-hidden="true">▶</span>
+      <input id="search-input" type="search" placeholder="ENTER OBJECT DESIGNATION…"
+             autocomplete="off" spellcheck="false" />
+      <button id="search-close" class="lcars-btn btn-red btn-sm">✕&nbsp;CLOSE</button>
     </div>
-    <div class="setting-row">
-      <label for="chk-labels">Constellation names</label>
-      <label class="toggle-switch">
-        <input type="checkbox" id="chk-labels" checked />
-        <span class="slider"></span>
-      </label>
-    </div>
-    <div class="setting-row">
-      <label for="chk-names">Star names</label>
-      <label class="toggle-switch">
-        <input type="checkbox" id="chk-names" />
-        <span class="slider"></span>
-      </label>
-    </div>
-    <div class="setting-row">
-      <label for="chk-grid">Alt/Az grid</label>
-      <label class="toggle-switch">
-        <input type="checkbox" id="chk-grid" />
-        <span class="slider"></span>
-      </label>
-    </div>
-
-    <div class="setting-row setting-row-range">
-      <div class="range-label">
-        <span>Limiting magnitude</span>
-        <span id="slider-mag-val">5.5</span>
-      </div>
-      <input type="range" id="slider-mag" min="1" max="7" step="0.5" value="5.5" />
-    </div>
+    <div id="search-results" class="hidden"></div>
   </div>
 
-  <!-- ── Sky canvas ────────────────────────────────────────── -->
-  <main id="canvas-container">
-    <canvas id="sky-canvas"></canvas>
-    <div id="status-bar" class="hidden"></div>
-  </main>
+  <!-- ═══════════════════════════════════════════════════
+       MAIN AREA — sidebar + canvas
+  ═══════════════════════════════════════════════════ -->
+  <div id="main-area">
 
-  <!-- ── Info panel (object details) ─────────────────────── -->
+    <!-- ── Left sidebar ──────────────────────────────── -->
+    <aside id="lcars-sidebar">
+
+      <div class="sb-block sb-orange"></div>
+
+      <div class="sb-section-label">SCAN&nbsp;MODE</div>
+      <div class="sb-btns">
+        <button class="filter-btn" id="filter-planets">⬟&nbsp;PLANETS</button>
+        <button class="filter-btn" id="filter-stars">★&nbsp;STARS</button>
+        <button class="filter-btn" id="filter-constellations">⋆&nbsp;PATTERNS</button>
+        <button class="filter-btn" id="filter-moon">◑&nbsp;MOON</button>
+      </div>
+
+      <div class="sb-block sb-purple"></div>
+
+      <div class="sb-section-label">DISPLAY</div>
+      <div class="sb-toggles">
+        <label class="toggle-row">
+          <input type="checkbox" id="chk-lines"  checked /><span class="t-track"><span class="t-thumb"></span></span>
+          <span class="t-name">CONST LINES</span>
+        </label>
+        <label class="toggle-row">
+          <input type="checkbox" id="chk-labels" checked /><span class="t-track"><span class="t-thumb"></span></span>
+          <span class="t-name">CONST NAMES</span>
+        </label>
+        <label class="toggle-row">
+          <input type="checkbox" id="chk-names" /><span class="t-track"><span class="t-thumb"></span></span>
+          <span class="t-name">STAR NAMES</span>
+        </label>
+        <label class="toggle-row">
+          <input type="checkbox" id="chk-grid" /><span class="t-track"><span class="t-thumb"></span></span>
+          <span class="t-name">ALT/AZ GRID</span>
+        </label>
+      </div>
+
+      <div class="sb-section-label">LIM&nbsp;MAG</div>
+      <div class="sb-range">
+        <input type="range" id="slider-mag" min="1" max="7" step="0.5" value="5.5" />
+        <span id="slider-mag-val" class="range-val mono">5.5</span>
+      </div>
+
+      <div class="sb-block sb-blue"></div>
+
+      <div class="sb-status">
+        <span class="blink-dot" aria-hidden="true"></span>
+        <span id="sidebar-status-text">NOMINAL</span>
+      </div>
+
+      <div class="sb-spacer"></div>
+      <div class="sb-cap" aria-hidden="true"></div>
+
+    </aside>
+
+    <!-- ── Canvas area ───────────────────────────────── -->
+    <main id="canvas-area">
+
+      <!-- Scan-line CRT overlay (purely decorative) -->
+      <div id="scanline-overlay" aria-hidden="true"></div>
+
+      <!-- LCARS corner trim -->
+      <div class="canvas-corner cc-tl" aria-hidden="true"></div>
+      <div class="canvas-corner cc-tr" aria-hidden="true"></div>
+
+      <canvas id="sky-canvas"></canvas>
+      <div id="status-bar" class="hidden"></div>
+
+      <!-- AR bearing readout -->
+      <div id="ar-readout" class="hidden">
+        <div class="ar-cell"><span class="ar-lbl">AZ</span> <span id="ar-az" class="mono">---°</span></div>
+        <span class="ar-sep" aria-hidden="true">◈</span>
+        <div class="ar-cell"><span class="ar-lbl">ALT</span><span id="ar-alt" class="mono">---°</span></div>
+        <span class="ar-sep" aria-hidden="true">◈</span>
+        <div class="ar-cell"><span class="ar-lbl">MODE</span><span id="ar-mode-label">SENSOR</span></div>
+      </div>
+
+    </main>
+
+  </div><!-- /#main-area -->
+
+  <!-- ═══════════════════════════════════════════════════
+       FOOTER — LCARS ticker bar
+  ═══════════════════════════════════════════════════ -->
+  <footer id="lcars-footer" aria-hidden="true">
+    <div class="footer-cap cap-left"></div>
+    <div id="footer-ticker">
+      <span id="footer-ticker-text">
+        LCARS&nbsp;7.1&nbsp;·&nbsp;ASTRONOMICAL&nbsp;NAVIGATION&nbsp;MODULE&nbsp;·&nbsp;
+        STAR&nbsp;TRACK&nbsp;·&nbsp;REAL&#x2011;TIME&nbsp;SKY&nbsp;MAPPING&nbsp;·&nbsp;
+        PLANET&nbsp;TRACKER&nbsp;ACTIVE&nbsp;·&nbsp;
+        LCARS&nbsp;7.1&nbsp;·&nbsp;ASTRONOMICAL&nbsp;NAVIGATION&nbsp;MODULE&nbsp;·&nbsp;
+        STAR&nbsp;TRACK&nbsp;·&nbsp;REAL&#x2011;TIME&nbsp;SKY&nbsp;MAPPING&nbsp;·&nbsp;
+        PLANET&nbsp;TRACKER&nbsp;ACTIVE&nbsp;·&nbsp;
+      </span>
+    </div>
+    <div class="footer-cap cap-right"></div>
+  </footer>
+
+  <!-- ═══════════════════════════════════════════════════
+       INFO PANEL — LCARS object data readout
+  ═══════════════════════════════════════════════════ -->
   <div id="info-panel" class="hidden">
     <div id="info-panel-header">
-      <button id="info-panel-close" title="Close">✕</button>
+      <div class="ip-elbow" aria-hidden="true">
+        <div class="ip-elbow-h"></div>
+        <div class="ip-elbow-v"></div>
+      </div>
+      <span class="ip-system-label">OBJECT&nbsp;DATA</span>
+      <span id="ip-object-name">&nbsp;</span>
+      <button id="info-panel-close" class="lcars-btn btn-red btn-sm">END&nbsp;SCAN</button>
     </div>
     <div id="info-panel-body"></div>
+    <div id="info-panel-footer" aria-hidden="true">
+      <div class="ipf-bar orange"></div>
+      <div class="ipf-bar purple"></div>
+      <div class="ipf-bar blue"></div>
+      <div class="ipf-bar orange short"></div>
+    </div>
   </div>
-
-  <!-- ── Bottom quick-filter bar ──────────────────────────── -->
-  <nav id="bottom-bar">
-    <button class="filter-btn" id="filter-planets" title="Planets">
-      <span class="fb-icon">🪐</span>
-      <span>Planets</span>
-    </button>
-    <button class="filter-btn" id="filter-stars" title="Bright stars">
-      <span class="fb-icon">⭐</span>
-      <span>Stars</span>
-    </button>
-    <button class="filter-btn" id="filter-constellations" title="Constellations">
-      <span class="fb-icon">✨</span>
-      <span>Patterns</span>
-    </button>
-    <button class="filter-btn" id="filter-moon" title="Moon">
-      <span class="fb-icon">🌕</span>
-      <span>Moon</span>
-    </button>
-  </nav>
 
 </div><!-- /#app -->
 
-<!-- ── Libraries ─────────────────────────────────────────── -->
 <script src="https://cdn.jsdelivr.net/npm/astronomy-engine@2/astronomy.browser.min.js"></script>
-
-<!-- ── App scripts ───────────────────────────────────────── -->
 <script src="js/data/stars.js"></script>
 <script src="js/data/constellations.js"></script>
 <script src="js/astronomy.js"></script>
