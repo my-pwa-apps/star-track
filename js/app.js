@@ -47,6 +47,7 @@
   let compassAlpha = null; // smoothed azimuth
   let smoothBeta    = null; // smoothed tilt   (altitude)
   let smoothGamma   = null; // smoothed roll   (az correction)
+  let wakeLock      = null; // Screen Wake Lock handle
 
   // ── Init ───────────────────────────────────────────────────
   function init() {
@@ -61,6 +62,7 @@
 
     renderer.resize();
     requestGeolocation();
+    requestWakeLock();
     startLoop();
 
     btnAR.addEventListener('click',           switchToAR);
@@ -73,9 +75,11 @@
     document.addEventListener('visibilitychange', () => {
       if (document.hidden) {
         cancelAnimationFrame(animHandle);
+        // Wake lock releases automatically when hidden — that’s fine
       } else {
         lastComputeTime = 0; // force immediate recompute
         startLoop();
+        requestWakeLock();  // re-acquire after returning to tab
       }
     });
 
@@ -83,7 +87,18 @@
     switchToMap();
   }
 
-  // ── Resize observer ────────────────────────────────────────
+  // ── Screen Wake Lock ──────────────────────────────────────────
+  async function requestWakeLock() {
+    if (!('wakeLock' in navigator)) return; // API not available (HTTP or older browser)
+    try {
+      wakeLock = await navigator.wakeLock.request('screen');
+      wakeLock.addEventListener('release', () => { wakeLock = null; });
+    } catch (err) {
+      // Non-critical — fails silently (e.g. low battery lockout)
+    }
+  }
+
+  // ── Resize observer ───────────────────────────────────────
   function setupResizeObserver() {
     const ro = new ResizeObserver(() => { renderer.resize(); });
     ro.observe(canvas);
@@ -94,7 +109,7 @@
     function frame(ts) {
       animHandle = requestAnimationFrame(frame);
       const now = Date.now();
-      if (now - lastComputeTime > 5000) { // recompute every 5 s
+      if (now - lastComputeTime > 30000) { // recompute every 30 s (positions change slowly)
         computePositions(now);
         lastComputeTime = now;
       }
