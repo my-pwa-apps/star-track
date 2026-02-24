@@ -45,7 +45,7 @@
   let orientation = { alpha: null, beta: null, gamma: null };
   let orientationSource = null; // 'absolute' | 'relative'
   let useDeviceOrientation = false;
-  let compassAlpha = null; // smoothed azimuth
+  let smoothAlpha = null; // smoothed compass heading (alpha)
   let smoothBeta    = null; // smoothed tilt   (altitude)
   let smoothGamma   = null; // smoothed roll   (az correction)
   // Previous raw sensor values used to compute per-frame angular velocity
@@ -480,12 +480,12 @@
     const lerpG = LERP_MIN + (LERP_MAX - LERP_MIN) * Math.min(velG / VEL_FULL, 1);
 
     // ─ Azimuth (alpha) — shortest-arc lerp to avoid 359↔0 wrap jump ─
-    if (compassAlpha === null) compassAlpha = targetAlpha;
-    let diffA = targetAlpha - compassAlpha;
+    if (smoothAlpha === null) smoothAlpha = targetAlpha;
+    let diffA = targetAlpha - smoothAlpha;
     if (diffA >  180) diffA -= 360;
     if (diffA < -180) diffA += 360;
     if (Math.abs(diffA) < DEADBAND_A) diffA = 0;
-    compassAlpha = (compassAlpha + diffA * lerpA + 360) % 360;
+    smoothAlpha = (smoothAlpha + diffA * lerpA + 360) % 360;
 
     // ─ Tilt / altitude (beta) ─
     if (smoothBeta === null) smoothBeta = targetBeta;
@@ -499,14 +499,42 @@
     if (Math.abs(diffG) < DEADBAND_G) diffG = 0;
     smoothGamma += diffG * lerpG;
 
-    // altitude = beta - 90 (beta=90 → horizon, beta=180 → zenith, beta=0 → nadir)
-    const alt = Math.max(-90, Math.min(90, smoothBeta - 90));
+    // ── Full rotation-matrix projection ─────────────────────
+    // Treating alpha/beta/gamma as independent axes (az = alpha + gamma*k)
+    // is wrong: when the phone is rolled (gamma≠0), tilting up/down (changing
+    // beta) causes the bearing of the look-vector to shift sideways.  The
+    // correct solution is to apply the ZXY Euler rotation to the camera axis
+    // and read back the resulting world-frame alt/az.
+    //
+    // R = Rz(-α) · Rx(β) · Ry(γ)   (α negated: W3C alpha is CW, Rz is CCW)
+    // Camera axis in device frame = −Z (back face = pointing outward when flat)
+    // Apply R to [0, 0, -1] → world-frame direction (ENU: X=East Y=North Z=Up)
+    //
+    //  east  = -cos(α)·sin(γ) + sin(α)·sin(β)·cos(γ)
+    //  north =  sin(α)·sin(γ) + cos(α)·sin(β)·cos(γ)
+    //  up    = -cos(β)·cos(γ)
+    //
+    // Verification:
+    //  β=0,γ=0    → up=-1  → alt=-90° (camera faces down when phone flat) ✓
+    //  β=90,α=0   → N=1    → alt=0°, az=0°  (vertical portrait → North horizon) ✓
+    //  β=90,α=90  → E=1    → alt=0°, az=90° (vertical portrait → East horizon) ✓
+    //  β=135,α=0  → N=√½,up=√½ → alt=45°, az=0° (tilted 45° up toward N) ✓
+    //  β=180,α=0  → up=1   → alt=90° (camera at zenith) ✓
+    {
+      const a = smoothAlpha * DEG;
+      const b = smoothBeta  * DEG;
+      const g = smoothGamma * DEG;
 
-    // azimuth + small roll correction
-    const az  = ((compassAlpha + smoothGamma * 0.2) % 360 + 360) % 360;
+      const east  = -Math.cos(a)*Math.sin(g) + Math.sin(a)*Math.sin(b)*Math.cos(g);
+      const north =  Math.sin(a)*Math.sin(g) + Math.cos(a)*Math.sin(b)*Math.cos(g);
+      const up    = -Math.cos(b)*Math.cos(g);
 
-    renderer.viewAz  = az;
-    renderer.viewAlt = alt;
+      const alt = Math.asin(Math.max(-1, Math.min(1, up))) * RAD;
+      const az  = ((Math.atan2(east, north) * RAD) + 360) % 360;
+
+      renderer.viewAz  = az;
+      renderer.viewAlt = alt;
+    }
   }
 
   // ── Mode switching ─────────────────────────────────────────
@@ -516,7 +544,7 @@
     btnAR.classList.remove('active');
     useDeviceOrientation = false;
     // Reset smoothed sensor state so next AR entry starts clean
-    compassAlpha = null;
+    smoothAlpha  = null;
     smoothBeta   = null;
     smoothGamma  = null;
     prevRawAlpha = null;
@@ -727,7 +755,7 @@
           if (renderer.mode === 'ar') {
             // Sync LERP start-points to current view before re-enabling sensor
             // so the view transitions smoothly rather than snapping.
-            compassAlpha     = renderer.viewAz;
+            smoothAlpha      = renderer.viewAz;
             smoothBeta       = renderer.viewAlt + 90;
             prevRawAlpha     = null;
             prevRawBeta      = null;
@@ -788,7 +816,7 @@
         // so the view transitions smoothly to sensor rather than snapping back.
         setTimeout(() => {
           if (renderer.mode === 'ar') {
-            compassAlpha     = renderer.viewAz;
+            smoothAlpha      = renderer.viewAz;
             smoothBeta       = renderer.viewAlt + 90;
             prevRawAlpha     = null;
             prevRawBeta      = null;
@@ -831,7 +859,7 @@
           // Re-enable sensor after mouse drag, synced to current view
           setTimeout(() => {
             if (renderer.mode === 'ar') {
-              compassAlpha     = renderer.viewAz;
+              smoothAlpha      = renderer.viewAz;
               smoothBeta       = renderer.viewAlt + 90;
               prevRawAlpha     = null;
               prevRawBeta      = null;
